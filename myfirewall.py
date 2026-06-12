@@ -4,6 +4,7 @@ import requests
 import termios
 import tty
 import ipaddress
+from queue import Queue
 from threading import Thread
 from rich.live import Live
 from rich.table import Table
@@ -27,6 +28,13 @@ prev_state = "FEED"
 prompt_mode = None  # None, "BLOCK", "IGNORE", "UNBLOCK"
 input_buffer = ""
 
+# Asynchronous Geolocation Resolution Queue
+geo_queue = Queue()
+geo_pending = set()
+
+# Connection history tracker
+history_cache = {}
+
 def is_local_ip(ip_str):
     try:
         ip = ipaddress.ip_address(ip_str)
@@ -41,8 +49,37 @@ def log_debug(msg):
     except Exception:
         pass
 
+def geo_lookup_worker():
+    """Asynchronously resolves pending Geolocation lookups without blocking main scan processes."""
+    global running
+    while running:
+        try:
+            # Check for next IP to query
+            ip = geo_queue.get(timeout=0.5)
+        except Exception:
+            continue
+            
+        try:
+            # Throttling delay to stay under the 45 requests/minute API limit safely
+            time.sleep(1.5)
+            
+            resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
+            if resp.status_code == 200:
+                data = resp.json()
+                geo_cache[ip] = data.get("country", "Unknown")
+            elif resp.status_code == 429: # Rate limit hit
+                geo_cache[ip] = "Rate Limited"
+                time.sleep(5.0)
+            else:
+                geo_cache[ip] = "Query Error"
+        except Exception:
+            geo_cache[ip] = "Failed"
+        finally:
+            geo_pending.discard(ip)
+            geo_queue.task_done()
+
 def update_data_loop():
-    global connections_cache, running, blocked_ips
+    global connections_cache, running, blocked_ips, history_cache
     try:
         init_firewall()
     except Exception as e:
@@ -52,43 +89,67 @@ def update_data_loop():
         try:
             blocked_ips = set(get_blocked_ips())
             
-            # Fetch active TCP, UDP, and RAW connections
+            # Fetch active TCP, UDP, and RAW connections (High Frequency 5Hz)
             raw_conns = get_active_connections()
             inode_map = get_inode_to_pid_map()
             
-            enriched = []
+            current_time = time.time()
+            current_keys = set()
+            
+            # Process current active connections
             for conn in raw_conns:
-                inode = conn["inode"]
-                pid = inode_map.get(inode)
-                name = "Unknown"
-                if pid:
-                    name, _ = get_process_info(pid)
-                    
-                remote_ip = conn["remote_ip"]
-                geo = "Local/Private"
-                if not is_local_ip(remote_ip):
-                    try:
-                        if remote_ip not in geo_cache:
-                            resp = requests.get(f"http://ip-api.com/json/{remote_ip}", timeout=1)
-                            if resp.status_code == 200:
-                                data = resp.json()
-                                geo = data.get("country", "Unknown")
-                            geo_cache[remote_ip] = geo
-                        geo = geo_cache[remote_ip]
-                    except Exception:
-                        geo_cache[remote_ip] = "Lookup Failed"
-                        geo = "Lookup Failed"
-                        
-                conn["pid"] = pid
-                conn["name"] = name
-                conn["geo"] = geo
-                enriched.append(conn)
+                key = (conn["protocol"], conn["local_ip"], conn["local_port"], conn["remote_ip"], conn["remote_port"])
+                current_keys.add(key)
                 
-            connections_cache = enriched
-            time.sleep(2)
+                if key in history_cache:
+                    history_cache[key]["last_seen"] = current_time
+                    history_cache[key]["status"] = "ACTIVE"
+                    history_cache[key]["inode"] = conn["inode"]
+                else:
+                    # Enrich and insert new connection
+                    inode = conn["inode"]
+                    pid = inode_map.get(inode)
+                    name = "Unknown"
+                    if pid:
+                        name, _ = get_process_info(pid)
+                        
+                    remote_ip = conn["remote_ip"]
+                    geo = "Local/Private"
+                    if not is_local_ip(remote_ip):
+                        if remote_ip not in geo_cache:
+                            geo_cache[remote_ip] = "Resolving..."
+                            if remote_ip not in geo_pending:
+                                geo_pending.add(remote_ip)
+                                geo_queue.put(remote_ip)
+                        geo = geo_cache[remote_ip]
+                        
+                    conn["pid"] = pid
+                    conn["name"] = name
+                    conn["geo"] = geo
+                    conn["last_seen"] = current_time
+                    conn["status"] = "ACTIVE"
+                    
+                    history_cache[key] = conn
+
+            # Handle inactive connections and prune those older than 10.0 seconds
+            pruned_history = {}
+            for key, conn in history_cache.items():
+                if key not in current_keys:
+                    # If older active check was seen within 10s, maintain in feed labeled INACTIVE
+                    if current_time - conn["last_seen"] < 10.0:
+                        conn["status"] = "INACTIVE"
+                        pruned_history[key] = conn
+                else:
+                    pruned_history[key] = conn
+                    
+            history_cache = pruned_history
+            connections_cache = list(history_cache.values())
+            
+            # Reduced sleep interval to 0.2s for highly responsive scanning
+            time.sleep(0.2)
         except Exception as e:
             log_debug(f"Error in update loop: {e}")
-            time.sleep(2)
+            time.sleep(0.2)
 
 def generate_table():
     global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names
@@ -112,9 +173,16 @@ def generate_table():
         for i, c in enumerate(conns):
             ip = c["remote_ip"]
             is_blocked = ip in blocked_ips
-            ip_display = f"[bold red]{ip} (BLOCKED)[/]" if is_blocked else f"[white]{ip}[/white]"
-            proc_display = f"[strike red]{c['name']}[/]" if is_blocked else c["name"]
+            is_active = c.get("status", "ACTIVE") == "ACTIVE"
             
+            # 1. Base display elements
+            if is_blocked:
+                ip_display = f"[bold red]{ip} (BLOCKED)[/]"
+                proc_display = f"[strike red]{c['name']}[/]"
+            else:
+                ip_display = f"[white]{ip}[/white]"
+                proc_display = c["name"]
+                
             proto = c.get("protocol", "TCP")
             if proto == "TCP":
                 proto_display = f"[bold cyan]TCP[/]"
@@ -124,14 +192,35 @@ def generate_table():
                 proto_display = f"[bold magenta]RAW[/]"
             else:
                 proto_display = f"[bold white]{proto}[/]"
+                
+            # Geolocation status checks
+            geo_val = geo_cache.get(ip, c["geo"])
+            if geo_val == "Resolving...":
+                geo_display = "[dim cyan]Resolving...[/]"
+            elif "Limit" in geo_val or "Error" in geo_val or "Failed" in geo_val:
+                geo_display = f"[dim red]{geo_val}[/]"
+            else:
+                geo_display = geo_val
+                
+            # 2. Inactive visual dimming layer (Evasion Risk Remediation)
+            if not is_active:
+                ip_display = f"[dim gray]{ip} (INACTIVE)[/dim]"
+                proc_display = f"[dim gray][strike]{c['name']}[/strike][/dim]" if is_blocked else f"[dim gray]{c['name']}[/dim]"
+                proto_display = f"[dim gray]{proto}[/dim]"
+                geo_display = f"[dim gray]{geo_display}[/dim]"
+                pid_display = f"[dim gray]{c['pid'] if c['pid'] else '?'}[/dim]"
+                idx_display = f"[dim gray]{i + 1}[/dim]"
+            else:
+                pid_display = str(c["pid"]) if c["pid"] else "?"
+                idx_display = str(i + 1)
             
             table.add_row(
-                str(i + 1),
+                idx_display,
                 proto_display,
                 proc_display,
-                str(c["pid"]) if c["pid"] else "?",
+                pid_display,
                 ip_display,
-                c["geo"]
+                geo_display
             )
             
         if prompt_mode == "BLOCK":
@@ -340,6 +429,15 @@ def keyboard_input_loop():
 def main():
     global running
     try:
+        # Start background Geolocation lookup thread
+        t_geo = Thread(target=geo_lookup_worker)
+        t_geo.daemon = True
+        t_geo.start()
+    except Exception as e:
+        log_debug(f"Failed to start GeoIP background worker process: {e}")
+
+    try:
+        # Start connections harvesting loop
         t = Thread(target=update_data_loop)
         t.daemon = True
         t.start()
@@ -357,7 +455,7 @@ def main():
         log_debug("Failed to start keyboard processing thread.")
         
     try:
-        with Live(generate_table(), refresh_per_second=2) as live:
+        with Live(generate_table(), refresh_per_second=5) as live:
             while running:
                 live.update(generate_table())
                 time.sleep(0.1)
