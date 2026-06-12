@@ -318,7 +318,8 @@ def handle_ignore_input(user_input):
         return
     try:
         idx = int(user_input) - 1
-        conns = [c for c in connections_cache if c["remote_ip"] not in ignored_ips and c["name"] not in ignored_names]
+        # Fix: Sync filtering with main dashboard view to align visual row index with selected connection
+        conns = [c for c in connections_cache if not is_local_ip(c["remote_ip"]) and c["remote_ip"] not in ignored_ips and c["name"] not in ignored_names]
         if 0 <= idx < len(conns):
             target = conns[idx]
             toggle_ip_ignore(target["remote_ip"])
