@@ -2,8 +2,13 @@ import sys
 import time
 import requests
 import termios
+import select
 import tty
 import ipaddress
+import json
+import socket
+import psutil
+import os
 from queue import Queue
 from threading import Thread
 from rich.live import Live
@@ -19,21 +24,75 @@ from firewall_manager import init_firewall, block_ip, unblock_ip, get_blocked_ip
 running = True
 connections_cache = []
 geo_cache = {}
+rdns_cache = {}
 blocked_ips = set()
 ignored_ips = set()
 ignored_names = set()
+ignored_cidrs = []
 
-view_state = "FEED"  # "FEED", "BLOCKED", "HELP"
+view_state = "FEED"  # "FEED", "BLOCKED", "HELP", "PROCESS_DETAIL"
 prev_state = "FEED"
-prompt_mode = None  # None, "BLOCK", "IGNORE", "UNBLOCK"
+prompt_mode = None  # None, "BLOCK", "IGNORE", "UNBLOCK", "DETAIL"
 input_buffer = ""
+selected_pid = None
+
+# Network metrics
+global_rx = 0
+global_tx = 0
+last_net_io = None
 
 # Asynchronous Geolocation Resolution Queue
 geo_queue = Queue()
 geo_pending = set()
 
+# Asynchronous RDNS Queue
+rdns_queue = Queue()
+rdns_pending = set()
+
 # Connection history tracker
 history_cache = {}
+
+CONFIG_FILE = os.path.expanduser("~/.config/myfirewall/rules.json")
+
+def load_config():
+    global blocked_ips, ignored_ips, ignored_names, ignored_cidrs
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, "r") as f:
+                data = json.load(f)
+                ignored_ips = set(data.get("ignored_ips", []))
+                ignored_names = set(data.get("ignored_names", []))
+                
+                # Parse CIDRs
+                ignored_cidrs.clear()
+                for cidr_str in data.get("ignored_cidrs", []):
+                    try:
+                        ignored_cidrs.append(ipaddress.ip_network(cidr_str, strict=False))
+                    except ValueError:
+                        pass
+                        
+                # Sync blocked_ips
+                saved_blocked = data.get("blocked_ips", [])
+                current_blocked = get_blocked_ips()
+                for ip in saved_blocked:
+                    if ip not in current_blocked:
+                        block_ip(ip)
+    except Exception as e:
+        log_debug(f"Failed to load config: {e}")
+
+def save_config():
+    try:
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        data = {
+            "blocked_ips": list(get_blocked_ips()),
+            "ignored_ips": list(ignored_ips),
+            "ignored_names": list(ignored_names),
+            "ignored_cidrs": [str(c) for c in ignored_cidrs]
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        log_debug(f"Failed to save config: {e}")
 
 def is_local_ip(ip_str):
     try:
@@ -78,8 +137,26 @@ def geo_lookup_worker():
             geo_pending.discard(ip)
             geo_queue.task_done()
 
+def rdns_worker():
+    """Asynchronously resolves pending Reverse DNS lookups."""
+    global running
+    while running:
+        try:
+            ip = rdns_queue.get(timeout=0.5)
+        except Exception:
+            continue
+            
+        try:
+            hostname, _, _ = socket.gethostbyaddr(ip)
+            rdns_cache[ip] = hostname
+        except Exception:
+            rdns_cache[ip] = ""  # No hostname found
+        finally:
+            rdns_pending.discard(ip)
+            rdns_queue.task_done()
+
 def update_data_loop():
-    global connections_cache, running, blocked_ips, history_cache
+    global connections_cache, running, blocked_ips, history_cache, global_rx, global_tx, last_net_io
     try:
         init_firewall()
     except Exception as e:
@@ -87,6 +164,17 @@ def update_data_loop():
         
     while running:
         try:
+            # Update bandwidth metrics
+            net_io = psutil.net_io_counters()
+            current_time = time.time()
+            if last_net_io:
+                last_time, last_io = last_net_io
+                dt = current_time - last_time
+                if dt > 0:
+                    global_rx = (net_io.bytes_recv - last_io.bytes_recv) / dt
+                    global_tx = (net_io.bytes_sent - last_io.bytes_sent) / dt
+            last_net_io = (current_time, net_io)
+
             blocked_ips = set(get_blocked_ips())
             
             # Fetch active TCP, UDP, and RAW connections (High Frequency 5Hz)
@@ -123,6 +211,10 @@ def update_data_loop():
                                 geo_queue.put(remote_ip)
                         geo = geo_cache[remote_ip]
                         
+                        if remote_ip not in rdns_cache and remote_ip not in rdns_pending:
+                            rdns_pending.add(remote_ip)
+                            rdns_queue.put(remote_ip)
+                        
                     conn["pid"] = pid
                     conn["name"] = name
                     conn["geo"] = geo
@@ -152,23 +244,26 @@ def update_data_loop():
             time.sleep(0.2)
 
 def generate_table():
-    global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names
+    global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names, global_rx, global_tx
     
     table = Table(show_header=True, header_style="bold magenta", expand=True)
     title_suffix = " (MOCK MODE)" if is_mock_mode() else ""
     
     if view_state == "FEED":
-        table.title = f"[bold cyan]NETWORK-MONITOR LIVE FEED{title_suffix}[/]"
+        rx_mb = global_rx / 1024 / 1024
+        tx_mb = global_tx / 1024 / 1024
+        table.title = f"[bold cyan]NETWORK-MONITOR LIVE FEED{title_suffix}[/] [dim white](Rx: {rx_mb:.2f} MB/s | Tx: {tx_mb:.2f} MB/s)[/]"
         
-        table.add_column("#", justify="right", style="cyan")
-        table.add_column("Proto", style="bold blue")
-        table.add_column("Process", style="green")
-        table.add_column("PID", justify="right", style="dim yellow")
-        table.add_column("Remote Address")
-        table.add_column("Geo", style="magenta")
+        # Enabled no_wrap on columns to preserve single-line layout and prevent grid wrapping on resize
+        table.add_column("#", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Proto", style="bold blue", no_wrap=True)
+        table.add_column("Process", style="green", no_wrap=True)
+        table.add_column("PID", justify="right", style="dim yellow", no_wrap=True)
+        table.add_column("Remote Address", no_wrap=True)
+        table.add_column("Geo / Hostname", style="magenta", no_wrap=True)
         
         # Filter items
-        conns = [c for c in connections_cache if not is_local_ip(c["remote_ip"]) and c["remote_ip"] not in ignored_ips and c["name"] not in ignored_names]
+        conns = get_filtered_conns()
         
         for i, c in enumerate(conns):
             ip = c["remote_ip"]
@@ -202,14 +297,18 @@ def generate_table():
             else:
                 geo_display = geo_val
                 
+            hostname = rdns_cache.get(ip, "Resolving...")
+            if hostname and hostname != "Resolving...":
+                geo_display += f" / {hostname}"
+                
             # 2. Inactive visual dimming layer (Evasion Risk Remediation)
             if not is_active:
-                ip_display = f"[dim gray]{ip} (INACTIVE)[/dim]"
-                proc_display = f"[dim gray][strike]{c['name']}[/strike][/dim]" if is_blocked else f"[dim gray]{c['name']}[/dim]"
-                proto_display = f"[dim gray]{proto}[/dim]"
-                geo_display = f"[dim gray]{geo_display}[/dim]"
-                pid_display = f"[dim gray]{c['pid'] if c['pid'] else '?'}[/dim]"
-                idx_display = f"[dim gray]{i + 1}[/dim]"
+                ip_display = f"[dim]{ip} (INACTIVE)[/dim]"
+                proc_display = f"[dim][strike]{c['name']}[/strike][/dim]" if is_blocked else f"[dim]{c['name']}[/dim]"
+                proto_display = f"[dim]{proto}[/dim]"
+                geo_display = f"[dim]{geo_display}[/dim]"
+                pid_display = f"[dim]{c['pid'] if c['pid'] else '?'}[/dim]"
+                idx_display = f"[dim]{i + 1}[/dim]"
             else:
                 pid_display = str(c["pid"]) if c["pid"] else "?"
                 idx_display = str(i + 1)
@@ -226,16 +325,47 @@ def generate_table():
         if prompt_mode == "BLOCK":
             table.caption = f"[bold yellow]Block/Toggle IP (Enter connection # or IP, then press Enter): {input_buffer}[/]"
         elif prompt_mode == "IGNORE":
-            table.caption = f"[bold yellow]Ignore/Hide IP or Process (Enter #, IP, or Process Name, then press Enter): {input_buffer}[/]"
+            table.caption = f"[bold yellow]Ignore/Hide IP, Process, or CIDR (Enter #, IP, Process Name, or CIDR, then press Enter): {input_buffer}[/]"
+        elif prompt_mode == "DETAIL":
+            table.caption = f"[bold yellow]Process Details (Enter connection #, then press Enter): {input_buffer}[/]"
         else:
-            table.caption = "[bold white]Q[/] Quit  |  [bold white]B[/] Block  |  [bold white]I[/] Ignore  |  [bold white]L[/] Blocked List  |  [bold white]H[/] Help"
+            table.caption = "[bold white]Q[/] Quit  |  [bold white]B[/] Block  |  [bold white]I[/] Ignore  |  [bold white]D[/] Process Detail  |  [bold white]L[/] Blocked List  |  [bold white]H[/] Help"
+            
+    elif view_state == "PROCESS_DETAIL":
+        table.title = f"[bold blue]NETWORK-MONITOR - PROCESS DETAILS{title_suffix}[/]"
+        
+        table.add_column("Property", style="cyan", no_wrap=True)
+        table.add_column("Value", style="white")
+        
+        if selected_pid:
+            try:
+                p = psutil.Process(selected_pid)
+                table.add_row("Process ID", str(p.pid))
+                table.add_row("Name", p.name())
+                table.add_row("Status", p.status())
+                table.add_row("User", p.username())
+                create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.create_time()))
+                table.add_row("Created At", create_time)
+                table.add_row("Exe Path", p.exe() or "Unknown")
+                cmdline = " ".join(p.cmdline())
+                table.add_row("Command Line", cmdline)
+                mem_mb = p.memory_info().rss / 1024 / 1024
+                table.add_row("Memory RSS", f"{mem_mb:.2f} MB")
+            except psutil.NoSuchProcess:
+                table.add_row("Error", "Process has terminated")
+            except Exception as e:
+                table.add_row("Error", str(e))
+        else:
+            table.add_row("Error", "No process selected")
+            
+        table.caption = "[bold green]Press ESC or Q to return...[/]"
             
     elif view_state == "BLOCKED":
         table.title = f"[bold red]NETWORK-MONITOR - BLOCKED IP RULES{title_suffix}[/]"
         
-        table.add_column("#", justify="right", style="cyan")
-        table.add_column("Blocked IP Address", style="red")
-        table.add_column("Status", style="bold red")
+        table.add_column("#", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Blocked IP Address", style="red", no_wrap=True)
+        table.add_column("Status", style="bold red", no_wrap=True)
         
         current_blocked = get_blocked_ips()
         for i, ip in enumerate(current_blocked):
@@ -253,8 +383,8 @@ def generate_table():
     elif view_state == "HELP":
         table.title = "[bold yellow]NETWORK-MONITOR - HELP MENU[/]"
         
-        table.add_column("Action", style="green")
-        table.add_column("Key", style="bold white")
+        table.add_column("Action", style="green", no_wrap=True)
+        table.add_column("Key", style="bold white", no_wrap=True)
         table.add_column("Description", style="dim white")
         
         table.add_row("Quit", "Q / ESC", "Exit the application")
@@ -276,6 +406,7 @@ def toggle_ip_block(ip):
     else:
         block_ip(ip)
     blocked_ips = set(get_blocked_ips())
+    save_config()
 
 def toggle_ip_ignore(ip):
     global ignored_ips
@@ -283,6 +414,7 @@ def toggle_ip_ignore(ip):
         ignored_ips.remove(ip)
     else:
         ignored_ips.add(ip)
+    save_config()
 
 def toggle_proc_ignore(name):
     global ignored_names
@@ -292,6 +424,22 @@ def toggle_proc_ignore(name):
     else:
         ignored_names.add(name)
         log_debug(f"Ignored process: {name}")
+    save_config()
+
+def get_filtered_conns():
+    filtered = []
+    for c in connections_cache:
+        ip = c["remote_ip"]
+        if is_local_ip(ip) or ip in ignored_ips or c["name"] in ignored_names:
+            continue
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if any(ip_obj in net for net in ignored_cidrs):
+                continue
+        except ValueError:
+            pass
+        filtered.append(c)
+    return filtered
 
 def handle_block_input(user_input):
     global blocked_ips
@@ -299,7 +447,7 @@ def handle_block_input(user_input):
         return
     try:
         idx = int(user_input) - 1
-        conns = [c for c in connections_cache if not is_local_ip(c["remote_ip"]) and c["remote_ip"] not in ignored_ips and c["name"] not in ignored_names]
+        conns = get_filtered_conns()
         if 0 <= idx < len(conns):
             ip = conns[idx]["remote_ip"]
             toggle_ip_block(ip)
@@ -318,8 +466,7 @@ def handle_ignore_input(user_input):
         return
     try:
         idx = int(user_input) - 1
-        # Fix: Sync filtering with main dashboard view to align visual row index with selected connection
-        conns = [c for c in connections_cache if not is_local_ip(c["remote_ip"]) and c["remote_ip"] not in ignored_ips and c["name"] not in ignored_names]
+        conns = get_filtered_conns()
         if 0 <= idx < len(conns):
             target = conns[idx]
             toggle_ip_ignore(target["remote_ip"])
@@ -328,10 +475,31 @@ def handle_ignore_input(user_input):
         pass
         
     try:
+        if "/" in user_input:
+            net = ipaddress.ip_network(user_input, strict=False)
+            if net not in ignored_cidrs:
+                ignored_cidrs.append(net)
+                save_config()
+            return
         ipaddress.ip_address(user_input)
         toggle_ip_ignore(user_input)
     except ValueError:
         toggle_proc_ignore(user_input)
+
+def handle_detail_input(user_input):
+    global selected_pid, view_state
+    if not user_input.strip():
+        return
+    try:
+        idx = int(user_input) - 1
+        conns = get_filtered_conns()
+        if 0 <= idx < len(conns):
+            pid = conns[idx]["pid"]
+            if pid:
+                selected_pid = pid
+                view_state = "PROCESS_DETAIL"
+    except ValueError:
+        pass
 
 def handle_unblock_input(user_input):
     if not user_input.strip():
@@ -364,36 +532,47 @@ def keyboard_input_loop():
         return
         
     try:
+        # Step raw terminal config exactly once before loop entry to prevent tty state corruption
+        tty.setraw(fd)
+        
         while running:
-            tty.setraw(sys.stdin.fileno())
-            ch = sys.stdin.read(1)
-            
-            # Escape sequence processing
-            if ord(ch) == 27:
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                tty.setraw(sys.stdin.fileno())
-                next1 = sys.stdin.read(1)
-                next2 = sys.stdin.read(1)
-                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-                # Esc maps to returning
-                if prompt_mode:
-                    prompt_mode = None
-                    input_buffer = ""
-                elif view_state == "HELP":
-                    view_state = prev_state
+            # Non-blocking wait for input to allow clean exit
+            r, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if not r:
                 continue
                 
-            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
-            
-            # Handle prompt input mapping
+            # Read 1 character from standard input in raw mode
+            ch = sys.stdin.read(1)
+            if not ch:
+                break
+                
+            # Escape sequence processing (Arrow keys / ESC)
+            if ord(ch) == 27:
+                # Fast check if remaining escape sequence components are waiting in buffer
+                r, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if r:
+                    sys.stdin.read(1) # swallow remainder 1
+                    sys.stdin.read(1) # swallow remainder 2
+                else:
+                    # Single ESC key was pressed: Cancel any active prompts or menus
+                    if prompt_mode:
+                        prompt_mode = None
+                        input_buffer = ""
+                    elif view_state == "HELP":
+                        view_state = prev_state
+                continue
+                
+            # Handle prompt text mapping
             if prompt_mode:
-                if ord(ch) in (10, 13):  # Enter
+                if ord(ch) in (10, 13):  # Enter key (Newline or CR)
                     if prompt_mode == "BLOCK":
                         handle_block_input(input_buffer)
                     elif prompt_mode == "IGNORE":
                         handle_ignore_input(input_buffer)
                     elif prompt_mode == "UNBLOCK":
                         handle_unblock_input(input_buffer)
+                    elif prompt_mode == "DETAIL":
+                        handle_detail_input(input_buffer)
                     prompt_mode = None
                     input_buffer = ""
                 elif ord(ch) in (8, 127):  # Backspace
@@ -402,10 +581,11 @@ def keyboard_input_loop():
                     input_buffer += ch
                 continue
                 
-            # Global Key Maps
+            # Global Navigation Keys
             ch_lower = ch.lower()
-            if view_state == "HELP":
-                view_state = prev_state
+            if view_state in ["HELP", "PROCESS_DETAIL"]:
+                if ch_lower == "q" or ord(ch) == 27:
+                    view_state = prev_state
                 continue
                 
             if ch_lower == "q" or ord(ch) == 3:  # Q or Ctrl+C
@@ -421,14 +601,20 @@ def keyboard_input_loop():
             elif ch_lower == "i" and view_state == "FEED":
                 prompt_mode = "IGNORE"
                 input_buffer = ""
+            elif ch_lower == "d" and view_state == "FEED":
+                prompt_mode = "DETAIL"
+                input_buffer = ""
             elif ch_lower == "u" and view_state == "BLOCKED":
                 prompt_mode = "UNBLOCK"
                 input_buffer = ""
     finally:
+        # Safely restore standard cooked settings exactly once upon exit
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 def main():
     global running
+    load_config()
+    
     try:
         # Start background Geolocation lookup thread
         t_geo = Thread(target=geo_lookup_worker)
@@ -436,6 +622,14 @@ def main():
         t_geo.start()
     except Exception as e:
         log_debug(f"Failed to start GeoIP background worker process: {e}")
+
+    try:
+        # Start background Reverse DNS thread
+        t_rdns = Thread(target=rdns_worker)
+        t_rdns.daemon = True
+        t_rdns.start()
+    except Exception as e:
+        log_debug(f"Failed to start RDNS background worker process: {e}")
 
     try:
         # Start connections harvesting loop
@@ -448,6 +642,7 @@ def main():
     # Wait for first fetch
     time.sleep(0.5)
     
+    t_input = None
     try:
         t_input = Thread(target=keyboard_input_loop)
         t_input.daemon = True
@@ -456,10 +651,16 @@ def main():
         log_debug("Failed to start keyboard processing thread.")
         
     try:
-        with Live(generate_table(), refresh_per_second=5) as live:
+        # pkexec strips TERM environment variables (sets TERM=dumb).
+        # We explicitly initialize Console to force terminal mode if a TTY is attached, otherwise rich will suppress output.
+        custom_console = Console(force_terminal=True) if sys.stdout.isatty() else Console()
+        
+        # Fixed: Enabled screen=True to activate the alternate screen buffer, completely preventing duplicate screen copies on resize!
+        with Live(generate_table(), auto_refresh=False, screen=True, console=custom_console) as live:
             while running:
-                live.update(generate_table())
-                time.sleep(0.1)
+                # Synchronously trigger refresh at a smooth, stable 5Hz rate (every 0.2s)
+                live.update(generate_table(), refresh=True)
+                time.sleep(0.2)
     except KeyboardInterrupt:
         pass
     except Exception as e:
@@ -468,6 +669,8 @@ def main():
         log_debug(traceback.format_exc())
     finally:
         running = False
+        if t_input and t_input.is_alive():
+            t_input.join(timeout=0.5)
 
 if __name__ == "__main__":
     main()
