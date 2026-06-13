@@ -1,4 +1,5 @@
 import sys
+import signal
 import time
 import requests
 import termios
@@ -107,6 +108,13 @@ def log_debug(msg):
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except Exception:
         pass
+
+def get_term_size():
+    """Safely query the current terminal dimensions with a sane fallback."""
+    try:
+        return os.get_terminal_size()
+    except OSError:
+        return os.terminal_size((120, 40))
 
 def geo_lookup_worker():
     """Asynchronously resolves pending Geolocation lookups without blocking main scan processes."""
@@ -243,159 +251,185 @@ def update_data_loop():
             log_debug(f"Error in update loop: {e}")
             time.sleep(0.2)
 
+# Layout tier thresholds (terminal column count)
+_LAYOUT_WIDE   = 130
+_LAYOUT_MEDIUM = 100
+_LAYOUT_NARROW = 70
+
+def _proto_display(proto, is_active):
+    """Render protocol badge, dimmed when inactive."""
+    colors = {"TCP": "bold cyan", "UDP": "bold yellow", "RAW": "bold magenta"}
+    color = colors.get(proto, "bold white")
+    if is_active:
+        return f"[{color}]{proto}[/]"
+    return f"[dim]{proto}[/dim]"
+
 def generate_table():
     global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names, global_rx, global_tx
-    
+
+    cols = get_term_size().columns
     table = Table(show_header=True, header_style="bold magenta", expand=True)
     title_suffix = " (MOCK MODE)" if is_mock_mode() else ""
-    
+
     if view_state == "FEED":
         rx_mb = global_rx / 1024 / 1024
         tx_mb = global_tx / 1024 / 1024
-        table.title = f"[bold cyan]NETWORK-MONITOR LIVE FEED{title_suffix}[/] [dim white](Rx: {rx_mb:.2f} MB/s | Tx: {tx_mb:.2f} MB/s)[/]"
-        
-        # Enabled no_wrap on columns to preserve single-line layout and prevent grid wrapping on resize
-        table.add_column("#", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Proto", style="bold blue", no_wrap=True)
-        table.add_column("Process", style="green", no_wrap=True)
-        table.add_column("PID", justify="right", style="dim yellow", no_wrap=True)
-        table.add_column("Remote Address", no_wrap=True)
-        table.add_column("Geo / Hostname", style="magenta", no_wrap=True)
-        
-        # Filter items
+        table.title = (
+            f"[bold cyan]NETWORK-MONITOR LIVE FEED{title_suffix}[/] "
+            f"[dim white](Rx: {rx_mb:.2f} MB/s | Tx: {tx_mb:.2f} MB/s)[/]"
+        )
+
+        # --- Adaptive column layout based on terminal width ---
+        if cols >= _LAYOUT_WIDE:
+            # WIDE: all columns
+            table.add_column("#",              justify="right", style="cyan",      no_wrap=True, width=3)
+            table.add_column("Proto",          style="bold blue",                  no_wrap=True, width=7)
+            table.add_column("Process",        style="green",                      no_wrap=True, max_width=24)
+            table.add_column("PID",            justify="right", style="dim yellow", no_wrap=True, width=7)
+            table.add_column("Remote Address",                                     no_wrap=True, min_width=18)
+            table.add_column("Geo / Hostname", style="magenta",                    no_wrap=True, min_width=16)
+        elif cols >= _LAYOUT_MEDIUM:
+            # MEDIUM: drop Geo/Hostname column, fold country into Remote Address
+            table.add_column("#",             justify="right", style="cyan",       no_wrap=True, width=3)
+            table.add_column("Proto",         style="bold blue",                   no_wrap=True, width=7)
+            table.add_column("Process",       style="green",                       no_wrap=True, max_width=20)
+            table.add_column("PID",           justify="right", style="dim yellow",  no_wrap=True, width=7)
+            table.add_column("Remote Address",                                      no_wrap=True, min_width=22)
+        elif cols >= _LAYOUT_NARROW:
+            # NARROW: drop PID and geo, keep essential identity columns
+            table.add_column("#",       justify="right", style="cyan",   no_wrap=True, width=3)
+            table.add_column("Proto",   style="bold blue",                no_wrap=True, width=7)
+            table.add_column("Process", style="green",                    no_wrap=True, max_width=16)
+            table.add_column("Remote IP",                                 no_wrap=True, min_width=16)
+        else:
+            # MINIMAL: bare minimum — number, proto, remote IP only
+            table.add_column("#",        justify="right", style="cyan",  no_wrap=True, width=3)
+            table.add_column("Proto",    style="bold blue",               no_wrap=True, width=7)
+            table.add_column("Remote IP",                                 no_wrap=True)
+
         conns = get_filtered_conns()
-        
+
         for i, c in enumerate(conns):
-            ip = c["remote_ip"]
-            is_blocked = ip in blocked_ips
-            is_active = c.get("status", "ACTIVE") == "ACTIVE"
-            
-            # 1. Base display elements
+            ip          = c["remote_ip"]
+            is_blocked  = ip in blocked_ips
+            is_active   = c.get("status", "ACTIVE") == "ACTIVE"
+            proto       = c.get("protocol", "TCP")
+
+            # --- Shared display elements ---
+            proto_disp = _proto_display(proto, is_active)
+            idx_disp   = str(i + 1) if is_active else f"[dim]{i + 1}[/dim]"
+
             if is_blocked:
-                ip_display = f"[bold red]{ip} (BLOCKED)[/]"
-                proc_display = f"[strike red]{c['name']}[/]"
+                ip_disp   = f"[bold red]{ip}[BLKD][/]"
+                proc_disp = f"[strike red]{c['name']}[/]"
             else:
-                ip_display = f"[white]{ip}[/white]"
-                proc_display = c["name"]
-                
-            proto = c.get("protocol", "TCP")
-            if proto == "TCP":
-                proto_display = f"[bold cyan]TCP[/]"
-            elif proto == "UDP":
-                proto_display = f"[bold yellow]UDP[/]"
-            elif proto == "RAW":
-                proto_display = f"[bold magenta]RAW[/]"
-            else:
-                proto_display = f"[bold white]{proto}[/]"
-                
-            # Geolocation status checks
+                ip_disp   = f"[white]{ip}[/white]"
+                proc_disp = c["name"]
+
+            if not is_active:
+                ip_disp   = f"[dim]{ip}[INACT][/dim]"
+                proc_disp = f"[dim][strike]{c['name']}[/strike][/dim]" if is_blocked else f"[dim]{c['name']}[/dim]"
+
+            pid_disp = str(c["pid"]) if c["pid"] else "?"
+            if not is_active:
+                pid_disp = f"[dim]{pid_disp}[/dim]"
+
+            # Geo / hostname
             geo_val = geo_cache.get(ip, c["geo"])
             if geo_val == "Resolving...":
-                geo_display = "[dim cyan]Resolving...[/]"
-            elif "Limit" in geo_val or "Error" in geo_val or "Failed" in geo_val:
-                geo_display = f"[dim red]{geo_val}[/]"
+                geo_disp = "[dim cyan]...[/]"
+            elif any(t in geo_val for t in ("Limit", "Error", "Failed")):
+                geo_disp = f"[dim red]{geo_val}[/]"
             else:
-                geo_display = geo_val
-                
-            hostname = rdns_cache.get(ip, "Resolving...")
-            if hostname and hostname != "Resolving...":
-                geo_display += f" / {hostname}"
-                
-            # 2. Inactive visual dimming layer (Evasion Risk Remediation)
+                geo_disp = geo_val
+
+            hostname = rdns_cache.get(ip, "")
+            if hostname:
+                geo_disp += f" / {hostname}"
+
             if not is_active:
-                ip_display = f"[dim]{ip} (INACTIVE)[/dim]"
-                proc_display = f"[dim][strike]{c['name']}[/strike][/dim]" if is_blocked else f"[dim]{c['name']}[/dim]"
-                proto_display = f"[dim]{proto}[/dim]"
-                geo_display = f"[dim]{geo_display}[/dim]"
-                pid_display = f"[dim]{c['pid'] if c['pid'] else '?'}[/dim]"
-                idx_display = f"[dim]{i + 1}[/dim]"
+                geo_disp = f"[dim]{geo_disp}[/dim]"
+
+            # --- Build row based on tier ---
+            if cols >= _LAYOUT_WIDE:
+                table.add_row(idx_disp, proto_disp, proc_disp, pid_disp, ip_disp, geo_disp)
+            elif cols >= _LAYOUT_MEDIUM:
+                # Fold country abbreviation into the address cell
+                country = geo_cache.get(ip, "").split(" /")[0].strip()
+                addr_cell = f"{ip_disp} [dim]{country}[/dim]" if country and country not in ("Resolving...", "") else ip_disp
+                table.add_row(idx_disp, proto_disp, proc_disp, pid_disp, addr_cell)
+            elif cols >= _LAYOUT_NARROW:
+                table.add_row(idx_disp, proto_disp, proc_disp, ip_disp)
             else:
-                pid_display = str(c["pid"]) if c["pid"] else "?"
-                idx_display = str(i + 1)
-            
-            table.add_row(
-                idx_display,
-                proto_display,
-                proc_display,
-                pid_display,
-                ip_display,
-                geo_display
-            )
-            
+                table.add_row(idx_disp, proto_disp, ip_disp)
+
         if prompt_mode == "BLOCK":
-            table.caption = f"[bold yellow]Block/Toggle IP (Enter connection # or IP, then press Enter): {input_buffer}[/]"
+            table.caption = f"[bold yellow]Block/Toggle IP (Enter # or IP, then Enter): {input_buffer}[/]"
         elif prompt_mode == "IGNORE":
-            table.caption = f"[bold yellow]Ignore/Hide IP, Process, or CIDR (Enter #, IP, Process Name, or CIDR, then press Enter): {input_buffer}[/]"
+            table.caption = f"[bold yellow]Ignore IP/Process/CIDR (Enter #, IP, Name, or CIDR): {input_buffer}[/]"
         elif prompt_mode == "DETAIL":
-            table.caption = f"[bold yellow]Process Details (Enter connection #, then press Enter): {input_buffer}[/]"
+            table.caption = f"[bold yellow]Process Details (Enter connection #, then Enter): {input_buffer}[/]"
         else:
-            table.caption = "[bold white]Q[/] Quit  |  [bold white]B[/] Block  |  [bold white]I[/] Ignore  |  [bold white]D[/] Process Detail  |  [bold white]L[/] Blocked List  |  [bold white]H[/] Help"
-            
+            table.caption = (
+                "[bold white]Q[/] Quit  |  [bold white]B[/] Block  |  [bold white]I[/] Ignore  "
+                "|  [bold white]D[/] Detail  |  [bold white]L[/] Blocked  |  [bold white]H[/] Help"
+            )
+
     elif view_state == "PROCESS_DETAIL":
         table.title = f"[bold blue]NETWORK-MONITOR - PROCESS DETAILS{title_suffix}[/]"
-        
         table.add_column("Property", style="cyan", no_wrap=True)
-        table.add_column("Value", style="white")
-        
+        table.add_column("Value",    style="white")
+
         if selected_pid:
             try:
                 p = psutil.Process(selected_pid)
-                table.add_row("Process ID", str(p.pid))
-                table.add_row("Name", p.name())
-                table.add_row("Status", p.status())
-                table.add_row("User", p.username())
+                table.add_row("Process ID",  str(p.pid))
+                table.add_row("Name",        p.name())
+                table.add_row("Status",      p.status())
+                table.add_row("User",        p.username())
                 create_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.create_time()))
-                table.add_row("Created At", create_time)
-                table.add_row("Exe Path", p.exe() or "Unknown")
-                cmdline = " ".join(p.cmdline())
-                table.add_row("Command Line", cmdline)
+                table.add_row("Created At",  create_time)
+                table.add_row("Exe Path",    p.exe() or "Unknown")
+                table.add_row("Command Line", " ".join(p.cmdline()))
                 mem_mb = p.memory_info().rss / 1024 / 1024
-                table.add_row("Memory RSS", f"{mem_mb:.2f} MB")
+                table.add_row("Memory RSS",  f"{mem_mb:.2f} MB")
             except psutil.NoSuchProcess:
                 table.add_row("Error", "Process has terminated")
             except Exception as e:
                 table.add_row("Error", str(e))
         else:
             table.add_row("Error", "No process selected")
-            
         table.caption = "[bold green]Press ESC or Q to return...[/]"
-            
+
     elif view_state == "BLOCKED":
         table.title = f"[bold red]NETWORK-MONITOR - BLOCKED IP RULES{title_suffix}[/]"
-        
-        table.add_column("#", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Blocked IP Address", style="red", no_wrap=True)
-        table.add_column("Status", style="bold red", no_wrap=True)
-        
-        current_blocked = get_blocked_ips()
-        for i, ip in enumerate(current_blocked):
-            table.add_row(
-                str(i + 1),
-                ip,
-                "BLOCKED (ACTIVE)"
-            )
-            
+        table.add_column("#",                 justify="right", style="cyan",     no_wrap=True)
+        table.add_column("Blocked IP Address",                 style="red",      no_wrap=True)
+        table.add_column("Status",                             style="bold red", no_wrap=True)
+
+        for i, ip in enumerate(get_blocked_ips()):
+            table.add_row(str(i + 1), ip, "BLOCKED (ACTIVE)")
+
         if prompt_mode == "UNBLOCK":
-            table.caption = f"[bold yellow]Unblock IP (Enter index # or IP, then press Enter): {input_buffer}[/]"
+            table.caption = f"[bold yellow]Unblock IP (Enter index # or IP, then Enter): {input_buffer}[/]"
         else:
             table.caption = "[bold white]Q[/] Quit  |  [bold white]U[/] Unblock  |  [bold white]L[/] Connections  |  [bold white]H[/] Help"
-            
+
     elif view_state == "HELP":
         table.title = "[bold yellow]NETWORK-MONITOR - HELP MENU[/]"
-        
-        table.add_column("Action", style="green", no_wrap=True)
-        table.add_column("Key", style="bold white", no_wrap=True)
+        table.add_column("Action",      style="green",    no_wrap=True)
+        table.add_column("Key",         style="bold white", no_wrap=True)
         table.add_column("Description", style="dim white")
-        
-        table.add_row("Quit", "Q / ESC", "Exit the application")
-        table.add_row("Block / Toggle", "B", "Enter connection index or custom IP to toggle block status")
-        table.add_row("Ignore / Hide", "I", "Enter connection index, custom IP, or process name to ignore/hide from feed")
-        table.add_row("Toggle View", "L", "Switch between connections feed and blocked list")
-        table.add_row("Help", "H", "Show/Hide this help menu")
-        table.add_row("Unblock IP", "U", "Enter index in blocked list or custom IP to unblock (only in Blocked List view)")
-        
+
+        table.add_row("Quit",          "Q / ESC", "Exit the application")
+        table.add_row("Block / Toggle", "B",      "Toggle block on a connection # or custom IP")
+        table.add_row("Ignore / Hide",  "I",      "Hide a connection, process, or CIDR from the feed")
+        table.add_row("Toggle View",    "L",      "Switch between connections feed and blocked list")
+        table.add_row("Help",           "H",      "Show/Hide this help menu")
+        table.add_row("Unblock IP",     "U",      "Unblock by index or IP (Blocked List view only)")
+        table.add_row("Process Detail", "D",      "Show process details for a connection index")
         table.caption = "[bold green]Press any key to return...[/]"
-        
+
     return table
 
 def toggle_ip_block(ip):
@@ -608,8 +642,12 @@ def keyboard_input_loop():
                 prompt_mode = "UNBLOCK"
                 input_buffer = ""
     finally:
-        # Safely restore standard cooked settings exactly once upon exit
-        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        # Safely restore standard cooked settings exactly once upon exit.
+        # Guard against I/O error when pkexec closes stdin before this thread exits.
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except termios.error:
+            pass
 
 def main():
     global running
@@ -654,8 +692,14 @@ def main():
         # pkexec strips TERM environment variables (sets TERM=dumb).
         # We explicitly initialize Console to force terminal mode if a TTY is attached, otherwise rich will suppress output.
         custom_console = Console(force_terminal=True) if sys.stdout.isatty() else Console()
-        
-        # Fixed: Enabled screen=True to activate the alternate screen buffer, completely preventing duplicate screen copies on resize!
+
+        # SIGWINCH handler: on terminal resize, nudge `running` to trigger an immediate next-cycle refresh.
+        # Rich's Live will re-query the console size automatically on the next update() call.
+        def _handle_sigwinch(signum, frame):
+            pass  # Live re-queries terminal size on next live.update(); no explicit action needed.
+        signal.signal(signal.SIGWINCH, _handle_sigwinch)
+
+        # screen=True activates the alternate screen buffer, preventing duplicate screen copies on resize.
         with Live(generate_table(), auto_refresh=False, screen=True, console=custom_console) as live:
             while running:
                 # Synchronously trigger refresh at a smooth, stable 5Hz rate (every 0.2s)
