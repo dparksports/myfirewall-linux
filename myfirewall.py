@@ -11,7 +11,7 @@ import socket
 import psutil
 import os
 from queue import Queue
-from threading import Thread
+from threading import Thread, Event
 from rich.live import Live
 from rich.table import Table
 from rich.console import Console
@@ -693,18 +693,29 @@ def main():
         # We explicitly initialize Console to force terminal mode if a TTY is attached, otherwise rich will suppress output.
         custom_console = Console(force_terminal=True) if sys.stdout.isatty() else Console()
 
-        # SIGWINCH handler: on terminal resize, nudge `running` to trigger an immediate next-cycle refresh.
-        # Rich's Live will re-query the console size automatically on the next update() call.
+        # Event used to wake the render loop immediately when the terminal is resized.
+        _resize_event = Event()
+
         def _handle_sigwinch(signum, frame):
-            pass  # Live re-queries terminal size on next live.update(); no explicit action needed.
+            # Clear any internally cached console dimensions so Rich re-queries os.get_terminal_size()
+            # on the very next render, picking up the new terminal width/height correctly.
+            custom_console._width = None
+            custom_console._height = None
+            _resize_event.set()
+
         signal.signal(signal.SIGWINCH, _handle_sigwinch)
 
         # screen=True activates the alternate screen buffer, preventing duplicate screen copies on resize.
         with Live(generate_table(), auto_refresh=False, screen=True, console=custom_console) as live:
             while running:
-                # Synchronously trigger refresh at a smooth, stable 5Hz rate (every 0.2s)
                 live.update(generate_table(), refresh=True)
-                time.sleep(0.2)
+                # Sleep up to 0.2 s, but wake immediately if a resize event fires.
+                woken_by_resize = _resize_event.wait(timeout=0.2)
+                if woken_by_resize:
+                    _resize_event.clear()
+                    # Brief pause so the terminal finishes reporting its new dimensions
+                    # before we re-render, avoiding a stale os.get_terminal_size() read.
+                    time.sleep(0.05)
     except KeyboardInterrupt:
         pass
     except Exception as e:
