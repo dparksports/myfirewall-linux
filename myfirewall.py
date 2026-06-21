@@ -1,346 +1,112 @@
+# myfirewall.py
 import sys
 import signal
 import time
-import requests
+import os
 import termios
 import select
 import tty
 import ipaddress
-import json
-import socket
-import psutil
-import os
-from queue import Queue
+import io
 from threading import Thread, Event
 from rich.live import Live
 from rich.table import Table
 from rich.console import Console
 
-# Import the new active connections function
-from network_monitor import get_active_connections
-from process_resolver import get_inode_to_pid_map, get_process_info
-from firewall_manager import init_firewall, block_ip, unblock_ip, get_blocked_ips, is_mock_mode
-from conntrack_monitor import start_conntrack_monitor
-from ebpf_monitor import start_ebpf_monitor
+# Import the core engine
+import myfirewall_core as core
 
-# Globals & Cache
-running = True
-connections_cache = []
-geo_cache = {}
-rdns_cache = {}
-blocked_ips = set()
-ignored_ips = set()
-ignored_names = set()
-ignored_cidrs = []
-
-# Real-time event-based monitoring queues and signals
-connection_events_queue = Queue()
-stop_events_monitor = Event()
-
+# UI State Globals
 view_state = "FEED"  # "FEED", "BLOCKED", "HELP", "PROCESS_DETAIL"
 prev_state = "FEED"
 prompt_mode = None  # None, "BLOCK", "IGNORE", "UNBLOCK", "DETAIL"
 input_buffer = ""
 selected_pid = None
+custom_console = None
 
-# Network metrics
-global_rx = 0
-global_tx = 0
-last_net_io = None
-
-# Asynchronous Geolocation Resolution Queue
-geo_queue = Queue()
-geo_pending = set()
-
-# Asynchronous RDNS Queue
-rdns_queue = Queue()
-rdns_pending = set()
-
-# Connection history tracker
-history_cache = {}
-
-CONFIG_FILE = os.path.expanduser("~/.config/myfirewall/rules.json")
-
-def load_config():
-    global blocked_ips, ignored_ips, ignored_names, ignored_cidrs
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, "r") as f:
-                data = json.load(f)
-                ignored_ips = set(data.get("ignored_ips", []))
-                ignored_names = set(data.get("ignored_names", []))
-                
-                # Parse CIDRs
-                ignored_cidrs.clear()
-                for cidr_str in data.get("ignored_cidrs", []):
-                    try:
-                        ignored_cidrs.append(ipaddress.ip_network(cidr_str, strict=False))
-                    except ValueError:
-                        pass
-                        
-                # Sync blocked_ips
-                saved_blocked = data.get("blocked_ips", [])
-                current_blocked = get_blocked_ips()
-                for ip in saved_blocked:
-                    if ip not in current_blocked:
-                        block_ip(ip)
-    except Exception as e:
-        log_debug(f"Failed to load config: {e}")
-
-def save_config():
-    try:
-        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-        data = {
-            "blocked_ips": list(get_blocked_ips()),
-            "ignored_ips": list(ignored_ips),
-            "ignored_names": list(ignored_names),
-            "ignored_cidrs": [str(c) for c in ignored_cidrs]
-        }
-        with open(CONFIG_FILE, "w") as f:
-            json.dump(data, f)
-    except Exception as e:
-        log_debug(f"Failed to save config: {e}")
-
-def is_local_ip(ip_str):
-    try:
-        ip = ipaddress.ip_address(ip_str)
-        return ip.is_private or ip.is_loopback
-    except ValueError:
-        return False
-
-def log_debug(msg):
-    try:
-        with open("debug.log", "a") as f:
-            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
-    except Exception:
-        pass
-
-def get_term_size():
-    """Safely query the current terminal dimensions with a sane fallback.
-    
-    Tries stdout, stderr, and stdin file descriptors in order, because pkexec
-    redirects stdout away from the TTY making os.get_terminal_size() fail or
-    return a stale/incorrect value on fd 1.
-    """
-    for fd in (1, 2, 0):  # stdout, stderr, stdin
-        try:
-            size = os.get_terminal_size(fd)
-            if size.columns > 0 and size.lines > 0:
-                return size
-        except OSError:
-            continue
-    return os.terminal_size((120, 40))
-
-def geo_lookup_worker():
-    """Asynchronously resolves pending Geolocation lookups without blocking main scan processes."""
-    global running
-    while running:
-        try:
-            # Check for next IP to query
-            ip = geo_queue.get(timeout=0.5)
-        except Exception:
-            continue
-            
-        try:
-            # Throttling delay to stay under the 45 requests/minute API limit safely
-            time.sleep(1.5)
-            
-            resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
-            if resp.status_code == 200:
-                data = resp.json()
-                geo_cache[ip] = data.get("country", "Unknown")
-            elif resp.status_code == 429: # Rate limit hit
-                geo_cache[ip] = "Rate Limited"
-                time.sleep(5.0)
-            else:
-                geo_cache[ip] = "Query Error"
-        except Exception:
-            geo_cache[ip] = "Failed"
-        finally:
-            geo_pending.discard(ip)
-            geo_queue.task_done()
-
-def rdns_worker():
-    """Asynchronously resolves pending Reverse DNS lookups."""
-    global running
-    while running:
-        try:
-            ip = rdns_queue.get(timeout=0.5)
-        except Exception:
-            continue
-            
-        try:
-            hostname, _, _ = socket.gethostbyaddr(ip)
-            rdns_cache[ip] = hostname
-        except Exception:
-            rdns_cache[ip] = ""  # No hostname found
-        finally:
-            rdns_pending.discard(ip)
-            rdns_queue.task_done()
-
-def update_data_loop():
-    global connections_cache, running, blocked_ips, history_cache, global_rx, global_tx, last_net_io
-    try:
-        init_firewall()
-    except Exception as e:
-        log_debug(f"Failed to initialize firewall: {e}")
-        
-    while running:
-        try:
-            # Update bandwidth metrics
-            net_io = psutil.net_io_counters()
-            current_time = time.time()
-            if last_net_io:
-                last_time, last_io = last_net_io
-                dt = current_time - last_time
-                if dt > 0:
-                    global_rx = (net_io.bytes_recv - last_io.bytes_recv) / dt
-                    global_tx = (net_io.bytes_sent - last_io.bytes_sent) / dt
-            last_net_io = (current_time, net_io)
-
-            blocked_ips = set(get_blocked_ips())
-            
-            # Fetch active TCP, UDP, and RAW connections (High Frequency 5Hz)
-            raw_conns = get_active_connections()
-            inode_map = get_inode_to_pid_map()
-            
-            current_time = time.time()
-            current_keys = set()
-            
-            # Process current active connections
-            for conn in raw_conns:
-                key = (conn["protocol"], conn["local_ip"], conn["local_port"], conn["remote_ip"], conn["remote_port"])
-                current_keys.add(key)
-                
-                if key in history_cache:
-                    history_cache[key]["last_seen"] = current_time
-                    history_cache[key]["status"] = "ACTIVE"
-                    history_cache[key]["inode"] = conn["inode"]
-                else:
-                    # Enrich and insert new connection
-                    inode = conn["inode"]
-                    pid = inode_map.get(inode)
-                    name = "Unknown"
-                    if pid:
-                        name, _ = get_process_info(pid)
-                        
-                    remote_ip = conn["remote_ip"]
-                    geo = "Local/Private"
-                    if not is_local_ip(remote_ip):
-                        if remote_ip not in geo_cache:
-                            geo_cache[remote_ip] = "Resolving..."
-                            if remote_ip not in geo_pending:
-                                geo_pending.add(remote_ip)
-                                geo_queue.put(remote_ip)
-                        geo = geo_cache[remote_ip]
-                        
-                        if remote_ip not in rdns_cache and remote_ip not in rdns_pending:
-                            rdns_pending.add(remote_ip)
-                            rdns_queue.put(remote_ip)
-                        
-                    conn["pid"] = pid
-                    conn["name"] = name
-                    conn["geo"] = geo
-                    conn["last_seen"] = current_time
-                    conn["status"] = "ACTIVE"
-                    
-                    history_cache[key] = conn
-
-            # Process real-time connection events from eBPF & Conntrack
-            while not connection_events_queue.empty():
-                try:
-                    event_conn = connection_events_queue.get_nowait()
-                except Exception:
-                    break
-                    
-                key = (event_conn["protocol"], event_conn["local_ip"], event_conn["local_port"], event_conn["remote_ip"], event_conn["remote_port"])
-                current_keys.add(key)
-                
-                if key in history_cache:
-                    history_cache[key]["last_seen"] = current_time
-                    history_cache[key]["status"] = "ACTIVE"
-                    if event_conn.get("pid"):
-                        history_cache[key]["pid"] = event_conn["pid"]
-                        history_cache[key]["name"] = event_conn["name"]
-                else:
-                    pid = event_conn.get("pid")
-                    name = event_conn.get("name", "Unknown")
-                    remote_ip = event_conn["remote_ip"]
-                    geo = "Local/Private"
-                    if not is_local_ip(remote_ip):
-                        if remote_ip not in geo_cache:
-                            geo_cache[remote_ip] = "Resolving..."
-                            if remote_ip not in geo_pending:
-                                geo_pending.add(remote_ip)
-                                geo_queue.put(remote_ip)
-                        geo = geo_cache[remote_ip]
-                        
-                        if remote_ip not in rdns_cache and remote_ip not in rdns_pending:
-                            rdns_pending.add(remote_ip)
-                            rdns_queue.put(remote_ip)
-                            
-                    event_conn["pid"] = pid
-                    event_conn["name"] = name
-                    event_conn["geo"] = geo
-                    event_conn["last_seen"] = current_time
-                    event_conn["status"] = "ACTIVE"
-                    
-                    history_cache[key] = event_conn
-
-            # Handle inactive connections and prune those older than 10.0 seconds
-            pruned_history = {}
-            for key, conn in history_cache.items():
-                if key not in current_keys:
-                    # If older active check was seen within 10s, maintain in feed labeled INACTIVE
-                    if current_time - conn["last_seen"] < 10.0:
-                        conn["status"] = "INACTIVE"
-                        pruned_history[key] = conn
-                else:
-                    pruned_history[key] = conn
-                    
-            history_cache = pruned_history
-            connections_cache = list(history_cache.values())
-            
-            # Reduced sleep interval to 0.2s for highly responsive scanning
-            time.sleep(0.2)
-        except Exception as e:
-            log_debug(f"Error in update loop: {e}")
-            time.sleep(0.2)
-
-# Layout tier thresholds (terminal column count)
+# Layout tier thresholds
 _LAYOUT_WIDE   = 130
 _LAYOUT_MEDIUM = 100
 _LAYOUT_NARROW = 70
 
+def get_term_size():
+    """Safely query the current terminal dimensions with multiple fallbacks."""
+    # 1. Try OS calls on file descriptors (stdin=0, stderr=2, stdout=1)
+    for fd in (0, 2, 1):  
+        try:
+            size = os.get_terminal_size(fd)
+            if size.columns > 0 and size.lines > 0:
+                return size
+        except (OSError, ValueError):
+            continue
+            
+    # 2. Try environment variables
+    try:
+        cols = int(os.environ.get('COLUMNS', 0))
+        lines = int(os.environ.get('LINES', 0))
+        if cols > 0 and lines > 0:
+            return os.terminal_size((cols, lines))
+    except ValueError:
+        pass
+
+    # 3. Try tput (asks the terminal directly via terminfo)
+    try:
+        import subprocess
+        lines = int(subprocess.check_output(['tput', 'lines']))
+        cols = int(subprocess.check_output(['tput', 'cols']))
+        if cols > 0 and lines > 0:
+            return os.terminal_size((cols, lines))
+    except Exception:
+        pass
+
+    # 4. Ultimate fallback
+    return os.terminal_size((100, 24))
+
 def _proto_display(proto, is_active):
-    """Render protocol badge, dimmed when inactive."""
     colors = {"TCP": "bold cyan", "UDP": "bold yellow", "RAW": "bold magenta"}
     color = colors.get(proto, "bold white")
     if is_active:
         return f"[{color}]{proto}[/]"
     return f"[dim]{proto}[/dim]"
 
-def generate_table():
-    global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names, global_rx, global_tx
+def get_filtered_conns():
+    filtered = []
+    for c in core.connections_cache:
+        ip = c["remote_ip"]
+        if core.is_local_ip(ip) or ip in core.ignored_ips or c["name"] in core.ignored_names:
+            continue
+        try:
+            ip_obj = ipaddress.ip_address(ip)
+            if any(ip_obj in net for net in core.ignored_cidrs):
+                continue
+        except ValueError:
+            pass
+        filtered.append(c)
+    return filtered
 
-    term_size = get_term_size()
-    cols = term_size.columns
-    rows = term_size.lines
+def generate_table():
+    global view_state, prompt_mode, input_buffer, custom_console
+
+    if custom_console is not None:
+        cols = custom_console.size.width
+        rows = custom_console.size.height
+    else:
+        term_size = get_term_size()
+        cols = term_size.columns
+        rows = term_size.lines
     
     table = Table(show_header=True, header_style="bold magenta", expand=True)
-    title_suffix = " (MOCK MODE)" if is_mock_mode() else ""
+    title_suffix = " (MOCK MODE)" if core.is_mock_mode() else ""
 
     if view_state == "FEED":
-        rx_mb = global_rx / 1024 / 1024
-        tx_mb = global_tx / 1024 / 1024
+        rx_mb = core.global_rx / 1024 / 1024
+        tx_mb = core.global_tx / 1024 / 1024
         table.title = (
             f"[bold cyan]NETWORK-MONITOR LIVE FEED{title_suffix}[/] "
             f"[dim white](Rx: {rx_mb:.2f} MB/s | Tx: {tx_mb:.2f} MB/s)[/]"
         )
 
-        # --- Adaptive column layout based on terminal width ---
         if cols >= _LAYOUT_WIDE:
-            # WIDE: all columns
             proc_width = max(16, cols // 6)
             ip_width = max(16, cols // 6)
             table.add_column("#",              justify="right", style="cyan",      no_wrap=True, width=3)
@@ -351,7 +117,6 @@ def generate_table():
             table.add_column("Remote Address",                                     no_wrap=True, max_width=ip_width)
             table.add_column("Geo / Hostname", style="magenta",                    no_wrap=True, max_width=cols // 4)
         elif cols >= _LAYOUT_MEDIUM:
-            # MEDIUM: drop Geo/Hostname column, fold country into Remote Address
             proc_width = max(16, cols // 5)
             ip_width = max(22, cols // 4)
             table.add_column("#",             justify="right", style="cyan",       no_wrap=True, width=3)
@@ -361,7 +126,6 @@ def generate_table():
             table.add_column("PID",           justify="right", style="dim yellow",  no_wrap=True, width=7)
             table.add_column("Remote Address",                                      no_wrap=True, max_width=ip_width)
         elif cols >= _LAYOUT_NARROW:
-            # NARROW: drop PID and geo, keep essential identity columns
             proc_width = max(12, cols // 4)
             ip_width = max(16, cols // 3)
             table.add_column("#",       justify="right", style="cyan",   no_wrap=True, width=3)
@@ -369,26 +133,20 @@ def generate_table():
             table.add_column("Process", style="green",                    no_wrap=True, max_width=proc_width)
             table.add_column("Remote IP",                                 no_wrap=True, max_width=ip_width)
         else:
-            # MINIMAL: bare minimum — number, proto, remote IP only
             table.add_column("#",        justify="right", style="cyan",  no_wrap=True, width=3)
             table.add_column("Proto",    style="bold blue",               no_wrap=True, width=5)
             table.add_column("Remote IP",                                 no_wrap=True)
 
         conns = get_filtered_conns()
-
-        # Guard against vertical overflow.
-        # Rich table decoration overhead: top border + title (2) + column headers (1)
-        # + header/data separator (1) + bottom border (1) + caption (1) + margin (2)
-        # = ~8 rows of non-data content. Use 10 to keep a safe buffer.
-        max_rows = max(3, rows - 10)
+        # Dynamically scale rows based on terminal height, leaving 10 lines for UI overhead
+        max_rows = max(1, rows - 10)
 
         for i, c in enumerate(conns[:max_rows]):
             ip          = c["remote_ip"]
-            is_blocked  = ip in blocked_ips
+            is_blocked  = ip in core.blocked_ips
             is_active   = c.get("status", "ACTIVE") == "ACTIVE"
             proto       = c.get("protocol", "TCP")
 
-            # --- Shared display elements ---
             proto_disp = _proto_display(proto, is_active)
             idx_disp   = str(i + 1) if is_active else f"[dim]{i + 1}[/dim]"
 
@@ -407,8 +165,7 @@ def generate_table():
             if not is_active:
                 pid_disp = f"[dim]{pid_disp}[/dim]"
 
-            # Geo / hostname
-            geo_val = geo_cache.get(ip, c["geo"])
+            geo_val = core.geo_cache.get(ip, c["geo"])
             if geo_val == "Resolving...":
                 geo_disp = "[dim cyan]...[/]"
             elif any(t in geo_val for t in ("Limit", "Error", "Failed")):
@@ -416,25 +173,22 @@ def generate_table():
             else:
                 geo_disp = geo_val
 
-            hostname = rdns_cache.get(ip, "")
+            hostname = core.rdns_cache.get(ip, "")
             if hostname:
                 geo_disp += f" / {hostname}"
 
             if not is_active:
                 geo_disp = f"[dim]{geo_disp}[/dim]"
 
-            # Connection direction display
             dir_val = c.get("direction", "OUTBOUND")
             dir_disp = "[bold green]IN[/]" if dir_val == "INBOUND" else "[bold blue]OUT[/]"
             if not is_active:
                 dir_disp = f"[dim]{dir_val[:3].upper()}[/dim]"
 
-            # --- Build row based on tier ---
             if cols >= _LAYOUT_WIDE:
                 table.add_row(idx_disp, proto_disp, dir_disp, proc_disp, pid_disp, ip_disp, geo_disp)
             elif cols >= _LAYOUT_MEDIUM:
-                # Fold country abbreviation into the address cell
-                country = geo_cache.get(ip, "").split(" /")[0].strip()
+                country = core.geo_cache.get(ip, "").split(" /")[0].strip()
                 addr_cell = f"{ip_disp} [dim]{country}[/dim]" if country and country not in ("Resolving...", "") else ip_disp
                 table.add_row(idx_disp, proto_disp, dir_disp, proc_disp, pid_disp, addr_cell)
             elif cols >= _LAYOUT_NARROW:
@@ -461,6 +215,7 @@ def generate_table():
 
         if selected_pid:
             try:
+                import psutil
                 p = psutil.Process(selected_pid)
                 table.add_row("Process ID",  str(p.pid))
                 table.add_row("Name",        p.name())
@@ -472,8 +227,6 @@ def generate_table():
                 table.add_row("Command Line", " ".join(p.cmdline()))
                 mem_mb = p.memory_info().rss / 1024 / 1024
                 table.add_row("Memory RSS",  f"{mem_mb:.2f} MB")
-            except psutil.NoSuchProcess:
-                table.add_row("Error", "Process has terminated")
             except Exception as e:
                 table.add_row("Error", str(e))
         else:
@@ -486,8 +239,8 @@ def generate_table():
         table.add_column("Blocked IP Address",                 style="red",      no_wrap=True)
         table.add_column("Status",                             style="bold red", no_wrap=True)
 
-        blocked_list = list(get_blocked_ips())
-        max_rows = max(3, rows - 10)
+        blocked_list = list(core.get_blocked_ips())
+        max_rows = max(1, rows - 10)
         for i, ip in enumerate(blocked_list[:max_rows]):
             table.add_row(str(i + 1), ip, "BLOCKED (ACTIVE)")
 
@@ -513,98 +266,46 @@ def generate_table():
 
     return table
 
-def toggle_ip_block(ip):
-    global blocked_ips
-    current_blocked = get_blocked_ips()
-    if ip in current_blocked:
-        unblock_ip(ip)
-    else:
-        block_ip(ip)
-    blocked_ips = set(get_blocked_ips())
-    save_config()
-
-def toggle_ip_ignore(ip):
-    global ignored_ips
-    if ip in ignored_ips:
-        ignored_ips.remove(ip)
-    else:
-        ignored_ips.add(ip)
-    save_config()
-
-def toggle_proc_ignore(name):
-    global ignored_names
-    if name in ignored_names:
-        ignored_names.remove(name)
-        log_debug(f"Unignored process: {name}")
-    else:
-        ignored_names.add(name)
-        log_debug(f"Ignored process: {name}")
-    save_config()
-
-def get_filtered_conns():
-    filtered = []
-    for c in connections_cache:
-        ip = c["remote_ip"]
-        if is_local_ip(ip) or ip in ignored_ips or c["name"] in ignored_names:
-            continue
-        try:
-            ip_obj = ipaddress.ip_address(ip)
-            if any(ip_obj in net for net in ignored_cidrs):
-                continue
-        except ValueError:
-            pass
-        filtered.append(c)
-    return filtered
+# --- Input Handlers ---
 
 def handle_block_input(user_input):
-    global blocked_ips
-    if not user_input.strip():
-        return
+    if not user_input.strip(): return
     try:
         idx = int(user_input) - 1
         conns = get_filtered_conns()
         if 0 <= idx < len(conns):
-            ip = conns[idx]["remote_ip"]
-            toggle_ip_block(ip)
+            core.toggle_ip_block(conns[idx]["remote_ip"])
             return
-    except ValueError:
-        pass
-        
+    except ValueError: pass
     try:
         ipaddress.ip_address(user_input)
-        toggle_ip_block(user_input)
-    except ValueError:
-        log_debug(f"Invalid IP for block input: {user_input}")
+        core.toggle_ip_block(user_input)
+    except ValueError: pass
 
 def handle_ignore_input(user_input):
-    if not user_input.strip():
-        return
+    if not user_input.strip(): return
     try:
         idx = int(user_input) - 1
         conns = get_filtered_conns()
         if 0 <= idx < len(conns):
-            target = conns[idx]
-            toggle_ip_ignore(target["remote_ip"])
+            core.toggle_proc_ignore(conns[idx]["name"])
             return
-    except ValueError:
-        pass
-        
+    except ValueError: pass
     try:
         if "/" in user_input:
             net = ipaddress.ip_network(user_input, strict=False)
-            if net not in ignored_cidrs:
-                ignored_cidrs.append(net)
-                save_config()
+            if net not in core.ignored_cidrs:
+                core.ignored_cidrs.append(net)
+                core.save_config()
             return
         ipaddress.ip_address(user_input)
-        toggle_ip_ignore(user_input)
+        core.toggle_ip_ignore(user_input)
     except ValueError:
-        toggle_proc_ignore(user_input)
+        core.toggle_proc_ignore(user_input)
 
 def handle_detail_input(user_input):
     global selected_pid, view_state
-    if not user_input.strip():
-        return
+    if not user_input.strip(): return
     try:
         idx = int(user_input) - 1
         conns = get_filtered_conns()
@@ -613,63 +314,47 @@ def handle_detail_input(user_input):
             if pid:
                 selected_pid = pid
                 view_state = "PROCESS_DETAIL"
-    except ValueError:
-        pass
+    except ValueError: pass
 
 def handle_unblock_input(user_input):
-    if not user_input.strip():
-        return
+    if not user_input.strip(): return
     try:
         idx = int(user_input) - 1
-        current_blocked = get_blocked_ips()
+        current_blocked = core.get_blocked_ips()
         if 0 <= idx < len(current_blocked):
-            unblock_ip(current_blocked[idx])
+            core.unblock_ip(current_blocked[idx])
             return
-    except ValueError:
-        pass
-        
+    except ValueError: pass
     try:
         ipaddress.ip_address(user_input)
-        unblock_ip(user_input)
-    except ValueError:
-        pass
+        core.unblock_ip(user_input)
+    except ValueError: pass
 
 def keyboard_input_loop():
-    global running, view_state, prev_state, prompt_mode, input_buffer
+    global view_state, prev_state, prompt_mode, input_buffer
     
     fd = sys.stdin.fileno()
     try:
         old_settings = termios.tcgetattr(fd)
     except termios.error:
-        log_debug("Not running in a TTY, keyboard input disabled.")
-        while running:
-            time.sleep(1)
+        while core.running: time.sleep(1)
         return
         
     try:
-        # Step raw terminal config exactly once before loop entry to prevent tty state corruption
         tty.setraw(fd)
-        
-        while running:
-            # Non-blocking wait for input to allow clean exit
+        while core.running:
             r, _, _ = select.select([sys.stdin], [], [], 0.1)
-            if not r:
-                continue
+            if not r: continue
                 
-            # Read 1 character from standard input in raw mode
             ch = sys.stdin.read(1)
-            if not ch:
-                break
+            if not ch: break
                 
-            # Escape sequence processing (Arrow keys / ESC)
             if ord(ch) == 27:
-                # Fast check if remaining escape sequence components are waiting in buffer
                 r, _, _ = select.select([sys.stdin], [], [], 0.05)
                 if r:
-                    sys.stdin.read(1) # swallow remainder 1
-                    sys.stdin.read(1) # swallow remainder 2
+                    sys.stdin.read(1)
+                    sys.stdin.read(1)
                 else:
-                    # Single ESC key was pressed: Cancel any active prompts or menus
                     if prompt_mode:
                         prompt_mode = None
                         input_buffer = ""
@@ -677,34 +362,28 @@ def keyboard_input_loop():
                         view_state = prev_state
                 continue
                 
-            # Handle prompt text mapping
             if prompt_mode:
-                if ord(ch) in (10, 13):  # Enter key (Newline or CR)
-                    if prompt_mode == "BLOCK":
-                        handle_block_input(input_buffer)
-                    elif prompt_mode == "IGNORE":
-                        handle_ignore_input(input_buffer)
-                    elif prompt_mode == "UNBLOCK":
-                        handle_unblock_input(input_buffer)
-                    elif prompt_mode == "DETAIL":
-                        handle_detail_input(input_buffer)
+                if ord(ch) in (10, 13):
+                    if prompt_mode == "BLOCK": handle_block_input(input_buffer)
+                    elif prompt_mode == "IGNORE": handle_ignore_input(input_buffer)
+                    elif prompt_mode == "UNBLOCK": handle_unblock_input(input_buffer)
+                    elif prompt_mode == "DETAIL": handle_detail_input(input_buffer)
                     prompt_mode = None
                     input_buffer = ""
-                elif ord(ch) in (8, 127):  # Backspace
+                elif ord(ch) in (8, 127):
                     input_buffer = input_buffer[:-1]
                 elif 32 <= ord(ch) <= 126:
                     input_buffer += ch
                 continue
                 
-            # Global Navigation Keys
             ch_lower = ch.lower()
             if view_state in ["HELP", "PROCESS_DETAIL"]:
                 if ch_lower == "q" or ord(ch) == 27:
                     view_state = prev_state
                 continue
                 
-            if ch_lower == "q" or ord(ch) == 3:  # Q or Ctrl+C
-                running = False
+            if ch_lower == "q" or ord(ch) == 3:
+                core.running = False
             elif ch_lower == "h":
                 prev_state = view_state
                 view_state = "HELP"
@@ -723,53 +402,15 @@ def keyboard_input_loop():
                 prompt_mode = "UNBLOCK"
                 input_buffer = ""
     finally:
-        # Safely restore standard cooked settings exactly once upon exit.
-        # Guard against I/O error when pkexec closes stdin before this thread exits.
         try:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
         except termios.error:
             pass
 
 def main():
-    global running
-    load_config()
+    core.load_config()
+    core.start_core_threads()
     
-    try:
-        # Start background Geolocation lookup thread
-        t_geo = Thread(target=geo_lookup_worker)
-        t_geo.daemon = True
-        t_geo.start()
-    except Exception as e:
-        log_debug(f"Failed to start GeoIP background worker process: {e}")
-
-    try:
-        # Start background Reverse DNS thread
-        t_rdns = Thread(target=rdns_worker)
-        t_rdns.daemon = True
-        t_rdns.start()
-    except Exception as e:
-        log_debug(f"Failed to start RDNS background worker process: {e}")
-
-    try:
-        # Start connections harvesting loop
-        t = Thread(target=update_data_loop)
-        t.daemon = True
-        t.start()
-    except Exception:
-        log_debug("Failed to start background logic thread.")
-
-    try:
-        # Start background event-based monitors (Conntrack & eBPF)
-        start_conntrack_monitor(connection_events_queue, stop_events_monitor)
-    except Exception as e:
-        log_debug(f"Failed to start Conntrack background monitor: {e}")
-
-    try:
-        start_ebpf_monitor(connection_events_queue, stop_events_monitor)
-    except Exception as e:
-        log_debug(f"Failed to start eBPF background monitor: {e}")
-        
-    # Wait for first fetch
     time.sleep(0.5)
     
     t_input = None
@@ -778,45 +419,99 @@ def main():
         t_input.daemon = True
         t_input.start()
     except Exception:
-        log_debug("Failed to start keyboard processing thread.")
+        core.log_debug("Failed to start keyboard processing thread.")
         
+    # ==========================================
+    # CRITICAL TERMINAL ISOLATION
+    # ==========================================
+    # We physically redirect the OS file descriptors 1 and 2 to /dev/null 
+    # so that NO background thread (eBPF, conntrack, etc.) can print to 
+    # the screen and push the UI out of frame.
+    # We then open a private descriptor to the TTY just for Rich.
+    
+    tty_fd = None
     try:
-        # pkexec strips TERM environment variables (sets TERM=dumb).
-        # We explicitly initialize Console to force terminal mode if a TTY is attached, otherwise rich will suppress output.
-        custom_console = Console(force_terminal=True) if sys.stdout.isatty() else Console()
+        # stdin (0) is usually the TTY even under sudo
+        tty_name = os.ttyname(0)
+        tty_fd = os.open(tty_name, os.O_WRONLY)
+    except Exception:
+        # Fallback: duplicate stdout/stderr before redirecting
+        try:
+            tty_fd = os.dup(1)
+        except Exception:
+            try:
+                tty_fd = os.dup(2)
+            except Exception:
+                pass
 
-        # Event used to wake the render loop immediately when the terminal is resized.
+    # Redirect fd 1 (stdout) and fd 2 (stderr) to /dev/null
+    devnull_fd = os.open(os.devnull, os.O_WRONLY)
+    orig_stdout_fd = os.dup(1)
+    orig_stderr_fd = os.dup(2)
+    os.dup2(devnull_fd, 1)
+    os.dup2(devnull_fd, 2)
+
+    # Redirect Python's sys.stdout and sys.stderr
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = io.StringIO() 
+    sys.stderr = io.StringIO()
+
+    try:
+        # Create a private file object for the TTY
+        tty_file = os.fdopen(tty_fd, 'w') if tty_fd is not None else original_stdout
+        
+        global custom_console
+        custom_console = Console(
+            file=tty_file, 
+            force_terminal=True, 
+            force_interactive=True
+        )
+
+        custom_console.clear()
+
         _resize_event = Event()
 
         def _handle_sigwinch(signum, frame):
-            # Clear any internally cached console dimensions so Rich re-queries os.get_terminal_size()
-            # on the very next render, picking up the new terminal width/height correctly.
-            custom_console._width = None
-            custom_console._height = None
+            # Rich automatically fetches the new size on the next render
+            # when width/height are not explicitly hardcoded.
             _resize_event.set()
 
         signal.signal(signal.SIGWINCH, _handle_sigwinch)
 
-        # screen=True activates the alternate screen buffer, preventing duplicate screen copies on resize.
         with Live(generate_table(), auto_refresh=False, screen=True, console=custom_console) as live:
-            while running:
+            while core.running:
                 live.update(generate_table(), refresh=True)
-                # Sleep up to 0.2 s, but wake immediately if a resize event fires.
                 woken_by_resize = _resize_event.wait(timeout=0.2)
                 if woken_by_resize:
                     _resize_event.clear()
-                    # Debounce: wait until no new resize events arrive for 80ms
                     while _resize_event.wait(timeout=0.08):
                         _resize_event.clear()
     except KeyboardInterrupt:
         pass
     except Exception as e:
-        log_debug(f"Fatal UI error: {e}")
-        import traceback
-        log_debug(traceback.format_exc())
+        try:
+            sys.stderr = original_stderr
+            core.log_debug(f"Fatal UI error: {e}")
+            import traceback
+            core.log_debug(traceback.format_exc())
+        except:
+            pass
     finally:
-        running = False
-        stop_events_monitor.set()
+        # Restore standard outputs
+        sys.stdout = original_stdout
+        sys.stderr = original_stderr
+        os.dup2(orig_stdout_fd, 1)
+        os.dup2(orig_stderr_fd, 2)
+        os.close(devnull_fd)
+        
+        if 'tty_file' in locals() and tty_file is not None:
+            tty_file.close()
+        elif tty_fd is not None:
+            os.close(tty_fd)
+            
+        core.running = False
+        core.stop_events_monitor.set()
         if t_input and t_input.is_alive():
             t_input.join(timeout=0.5)
 
