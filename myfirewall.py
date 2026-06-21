@@ -95,7 +95,7 @@ def generate_table():
         cols = term_size.columns
         rows = term_size.lines
     
-    table = Table(show_header=True, header_style="bold magenta", expand=True)
+    table = Table(show_header=False, box=None, expand=True)
     title_suffix = " (MOCK MODE)" if core.is_mock_mode() else ""
 
     if view_state == "FEED":
