@@ -74,10 +74,12 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertEqual(tcp_conns[0]["remote_ip"], "127.0.0.1")
         self.assertEqual(tcp_conns[0]["remote_port"], 1111)
         self.assertEqual(tcp_conns[0]["inode"], "12345")
+        self.assertEqual(tcp_conns[0]["direction"], "INBOUND")
 
         self.assertEqual(udp_conns[0]["remote_ip"], "127.0.0.2")
         self.assertEqual(udp_conns[0]["remote_port"], 1112)
         self.assertEqual(udp_conns[0]["inode"], "12346")
+        self.assertEqual(udp_conns[0]["direction"], "OUTBOUND")
 
         self.assertEqual(raw_conns[0]["remote_ip"], "127.0.0.3")
         self.assertEqual(raw_conns[0]["remote_port"], 0)

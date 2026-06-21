@@ -1,0 +1,1133 @@
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:42:
+In file included from include/linux/ns_common.h:5:
+include/linux/ns/ns_common_types.h:119:3: warning: declaration does not declare anything [-Wmissing-declarations]
+  119 |                 struct ns_tree;
+      |                 ^~~~~~~~~~~~~~
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:42:
+include/linux/ns_common.h:25:23: error: no member named 'ns_id' in 'struct ns_common'
+   25 |         VFS_WARN_ON_ONCE(ns->ns_id == 0);
+      |                          ~~  ^
+include/linux/ns_common.h:26:13: error: no member named 'ns_id' in 'struct ns_common'
+   26 |         return ns->ns_id <= NS_LAST_INIT_ID;
+      |                ~~  ^
+include/linux/ns_common.h:62:26: error: no member named '__ns_ref_active' in 'struct ns_common'
+   62 |         return atomic_read(&ns->__ns_ref_active);
+      |                             ~~  ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:98:11: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+   98 |                 return (set->sig[3] | set->sig[2] |
+      |                         ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:98:25: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+   98 |                 return (set->sig[3] | set->sig[2] |
+      |                                       ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:99:4: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+   99 |                         set->sig[1] | set->sig[0]) == 0;
+      |                         ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:101:11: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  101 |                 return (set->sig[1] | set->sig[0]) == 0;
+      |                         ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:114:11: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  114 |                 return  (set1->sig[3] == set2->sig[3]) &&
+      |                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:114:27: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  114 |                 return  (set1->sig[3] == set2->sig[3]) &&
+      |                                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:115:5: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  115 |                         (set1->sig[2] == set2->sig[2]) &&
+      |                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:115:21: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  115 |                         (set1->sig[2] == set2->sig[2]) &&
+      |                                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:116:5: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  116 |                         (set1->sig[1] == set2->sig[1]) &&
+      |                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:116:21: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  116 |                         (set1->sig[1] == set2->sig[1]) &&
+      |                                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:119:11: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  119 |                 return  (set1->sig[1] == set2->sig[1]) &&
+      |                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:119:27: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  119 |                 return  (set1->sig[1] == set2->sig[1]) &&
+      |                                          ^         ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:8: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:24: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:8: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:24: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:140:3: note: expanded from macro '_SIG_SET_BINOP'
+  140 |                 r->sig[3] = op(a3, b3);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:141:3: note: expanded from macro '_SIG_SET_BINOP'
+  141 |                 r->sig[2] = op(a2, b2);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:8: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:24: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:157:1: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  157 | _SIG_SET_BINOP(sigorsets, _sig_or)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:145:3: note: expanded from macro '_SIG_SET_BINOP'
+  145 |                 r->sig[1] = op(a1, b1);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:8: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:24: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:8: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:24: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:140:3: note: expanded from macro '_SIG_SET_BINOP'
+  140 |                 r->sig[3] = op(a3, b3);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:141:3: note: expanded from macro '_SIG_SET_BINOP'
+  141 |                 r->sig[2] = op(a2, b2);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:8: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:24: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:160:1: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  160 | _SIG_SET_BINOP(sigandsets, _sig_and)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:145:3: note: expanded from macro '_SIG_SET_BINOP'
+  145 |                 r->sig[1] = op(a1, b1);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:8: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:138:24: note: expanded from macro '_SIG_SET_BINOP'
+  138 |                 a3 = a->sig[3]; a2 = a->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 3 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:8: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 2 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:139:24: note: expanded from macro '_SIG_SET_BINOP'
+  139 |                 b3 = b->sig[3]; b2 = b->sig[2];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:140:3: note: expanded from macro '_SIG_SET_BINOP'
+  140 |                 r->sig[3] = op(a3, b3);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:141:3: note: expanded from macro '_SIG_SET_BINOP'
+  141 |                 r->sig[2] = op(a2, b2);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:8: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 1 is past the end of the array (that has type 'const unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:144:24: note: expanded from macro '_SIG_SET_BINOP'
+  144 |                 a1 = a->sig[1]; b1 = b->sig[1];                         \
+      |                                      ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:163:1: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  163 | _SIG_SET_BINOP(sigandnsets, _sig_andn)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:145:3: note: expanded from macro '_SIG_SET_BINOP'
+  145 |                 r->sig[1] = op(a1, b1);                                 \
+      |                 ^      ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:174:27: note: expanded from macro '_SIG_SET_OP'
+  174 |         case 4: set->sig[3] = op(set->sig[3]);                          \
+      |                                  ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 3 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:174:10: note: expanded from macro '_SIG_SET_OP'
+  174 |         case 4: set->sig[3] = op(set->sig[3]);                          \
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:175:20: note: expanded from macro '_SIG_SET_OP'
+  175 |                 set->sig[2] = op(set->sig[2]);                          \
+      |                                  ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 2 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:175:3: note: expanded from macro '_SIG_SET_OP'
+  175 |                 set->sig[2] = op(set->sig[2]);                          \
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:177:27: note: expanded from macro '_SIG_SET_OP'
+  177 |         case 2: set->sig[1] = op(set->sig[1]);                          \
+      |                                  ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:187:1: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  187 | _SIG_SET_OP(signotset, _sig_not)
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/signal.h:177:10: note: expanded from macro '_SIG_SET_OP'
+  177 |         case 2: set->sig[1] = op(set->sig[1]);                          \
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:198:10: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  198 |         case 2: set->sig[1] = 0;
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:211:10: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  211 |         case 2: set->sig[1] = -1;
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:242:10: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  242 |         case 2: set->sig[1] = 0;
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+In file included from include/linux/fs.h:5:
+In file included from include/linux/fs/super.h:5:
+In file included from include/linux/fs/super_types.h:13:
+In file included from include/linux/percpu-rwsem.h:7:
+In file included from include/linux/rcuwait.h:6:
+In file included from include/linux/sched/signal.h:6:
+include/linux/signal.h:255:10: warning: array index 1 is past the end of the array (that has type 'unsigned long[1]') [-Warray-bounds]
+  255 |         case 2: set->sig[1] = -1;
+      |                 ^        ~
+arch/x86/include/asm/signal.h:24:2: note: array 'sig' declared here
+   24 |         unsigned long sig[_NSIG_WORDS];
+      |         ^
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:38:
+In file included from include/net/net_namespace.h:44:
+In file included from include/linux/skbuff.h:17:
+In file included from include/linux/bvec.h:10:
+In file included from include/linux/highmem.h:5:
+include/linux/fs.h:2429:2: warning: declaration does not declare anything [-Wmissing-declarations]
+ 2429 |         struct __filename_head;
+      |         ^~~~~~~~~~~~~~~~~~~~~~
+include/linux/fs.h:2433:15: error: static assertion failed due to requirement 'sizeof(struct filename) % 64 == 0': sizeof(struct filename) % 64 == 0
+ 2433 | static_assert(sizeof(struct filename) % 64 == 0);
+      |               ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+include/linux/build_bug.h:79:50: note: expanded from macro 'static_assert'
+   79 | #define static_assert(expr, ...) __static_assert(expr, ##__VA_ARGS__, #expr)
+      |                                                  ^~~~
+include/linux/build_bug.h:80:56: note: expanded from macro '__static_assert'
+   80 | #define __static_assert(expr, msg, ...) _Static_assert(expr, msg)
+      |                                                        ^~~~
+include/linux/fs.h:2433:44: note: expression evaluates to '40 == 0'
+ 2433 | static_assert(sizeof(struct filename) % 64 == 0);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~
+include/linux/build_bug.h:79:50: note: expanded from macro 'static_assert'
+   79 | #define static_assert(expr, ...) __static_assert(expr, ##__VA_ARGS__, #expr)
+      |                                                  ^~~~
+include/linux/build_bug.h:80:56: note: expanded from macro '__static_assert'
+   80 | #define __static_assert(expr, msg, ...) _Static_assert(expr, msg)
+      |                                                        ^~~~
+In file included from /virtual/main.c:3:
+In file included from include/net/sock.h:46:
+In file included from include/linux/netdevice.h:44:
+In file included from include/uapi/linux/neighbour.h:6:
+In file included from include/linux/netlink.h:9:
+In file included from include/net/scm.h:9:
+In file included from include/linux/security.h:35:
+include/linux/bpf.h:410:10: error: invalid application of 'sizeof' to an incomplete type 'struct bpf_task_work'
+  410 |                 return sizeof(struct bpf_task_work);
+      |                        ^     ~~~~~~~~~~~~~~~~~~~~~~
+include/linux/bpf.h:410:24: note: forward declaration of 'struct bpf_task_work'
+  410 |                 return sizeof(struct bpf_task_work);
+      |                                      ^
+include/linux/bpf.h:444:10: error: invalid application of '__alignof' to an incomplete type 'struct bpf_task_work'
+  444 |                 return __alignof__(struct bpf_task_work);
+      |                        ^          ~~~~~~~~~~~~~~~~~~~~~~
+include/linux/bpf.h:444:29: note: forward declaration of 'struct bpf_task_work'
+  444 |                 return __alignof__(struct bpf_task_work);
+      |                                           ^
+include/linux/bpf.h:2196:61: error: use of undeclared identifier 'BPF_TRACE_FSESSION'; did you mean 'BPF_TRAMP_FSESSION'?
+ 2196 |                 if (fentries.links[i]->link.prog->expected_attach_type == BPF_TRACE_FSESSION)
+      |                                                                           ^~~~~~~~~~~~~~~~~~
+      |                                                                           BPF_TRAMP_FSESSION
+include/linux/bpf.h:1316:2: note: 'BPF_TRAMP_FSESSION' declared here
+ 1316 |         BPF_TRAMP_FSESSION,
+      |         ^
+include/linux/bpf.h:2196:58: warning: comparison of different enumeration types ('enum bpf_attach_type' and 'enum bpf_tramp_prog_type') [-Wenum-compare]
+ 2196 |                 if (fentries.links[i]->link.prog->expected_attach_type == BPF_TRACE_FSESSION)
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~~~~~~
+include/linux/bpf.h:3995:16: error: use of undeclared identifier 'BPF_F_CPU'
+ 3995 |         if (!(flags & BPF_F_CPU) && flags >> 32)
+      |                       ^~~~~~~~~
+include/linux/bpf.h:3998:15: error: use of undeclared identifier 'BPF_F_CPU'
+ 3998 |         if (flags & (BPF_F_CPU | BPF_F_ALL_CPUS)) {
+      |                      ^~~~~~~~~
+include/linux/bpf.h:3998:27: error: use of undeclared identifier 'BPF_F_ALL_CPUS'
+ 3998 |         if (flags & (BPF_F_CPU | BPF_F_ALL_CPUS)) {
+      |                                  ^~~~~~~~~~~~~~
+include/linux/bpf.h:4001:16: error: use of undeclared identifier 'BPF_F_CPU'
+ 4001 |                 if ((flags & BPF_F_CPU) && (flags & BPF_F_ALL_CPUS))
+      |                              ^~~~~~~~~
+include/linux/bpf.h:4001:39: error: use of undeclared identifier 'BPF_F_ALL_CPUS'
+ 4001 |                 if ((flags & BPF_F_CPU) && (flags & BPF_F_ALL_CPUS))
+      |                                                     ^~~~~~~~~~~~~~
+include/linux/bpf.h:4005:16: error: use of undeclared identifier 'BPF_F_CPU'
+ 4005 |                 if ((flags & BPF_F_CPU) && cpu >= num_possible_cpus())
+      |                              ^~~~~~~~~
+/virtual/main.c:50:24: error: incompatible pointer to integer conversion assigning to 'u32' (aka 'unsigned int') from '__u8[4]' (aka 'unsigned char[4]') [-Wint-conversion]
+   50 |         event.saddr[0] = args->saddr;
+      |                        ^ ~~~~~~~~~~~
+/virtual/main.c:51:24: error: incompatible pointer to integer conversion assigning to 'u32' (aka 'unsigned int') from '__u8[4]' (aka 'unsigned char[4]') [-Wint-conversion]
+   51 |         event.daddr[0] = args->daddr;
+      |                        ^ ~~~~~~~~~~~
+52 warnings and 15 errors generated.

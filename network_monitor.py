@@ -21,9 +21,39 @@ def hex_to_ip_port(hex_str, is_ipv6=False):
         ip = socket.inet_ntoa(ip_bytes)
     return ip, port
 
+def get_listening_ports():
+    """Reads TCP and TCP6 listening ports from /proc/net/tcp{,6} where state is 0A."""
+    ports = set()
+    files = [
+        ("/proc/net/tcp", False),
+        ("/proc/net/tcp6", True)
+    ]
+    for filepath, is_ipv6 in files:
+        if not os.path.exists(filepath):
+            continue
+        try:
+            with open(filepath, "r") as f:
+                lines = f.readlines()
+                for line in lines[1:]:
+                    parts = line.split()
+                    if len(parts) < 4:
+                        continue
+                    state = parts[3]
+                    if state == "0A":  # TCP_LISTEN
+                        local_addr = parts[1]
+                        try:
+                            _, local_port = hex_to_ip_port(local_addr, is_ipv6)
+                            ports.add(local_port)
+                        except Exception:
+                            continue
+        except Exception:
+            continue
+    return ports
+
 def get_active_connections():
     """Reads TCP, UDP, and RAW sockets for IPv4 and IPv6, returning a list of active connections."""
     connections = []
+    listening_ports = get_listening_ports()
     
     # Files to monitor: (filepath, protocol, is_ipv6)
     files = [
@@ -65,6 +95,8 @@ def get_active_connections():
                     except Exception:
                         continue
                         
+                    direction = "INBOUND" if local_port in listening_ports else "OUTBOUND"
+                    
                     connections.append({
                         "protocol": protocol,
                         "local_ip": local_ip,
@@ -72,7 +104,8 @@ def get_active_connections():
                         "remote_ip": remote_ip,
                         "remote_port": remote_port,
                         "inode": inode,
-                        "is_ipv6": is_ipv6
+                        "is_ipv6": is_ipv6,
+                        "direction": direction
                     })
         except Exception:
             continue

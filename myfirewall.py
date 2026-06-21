@@ -20,6 +20,8 @@ from rich.console import Console
 from network_monitor import get_active_connections
 from process_resolver import get_inode_to_pid_map, get_process_info
 from firewall_manager import init_firewall, block_ip, unblock_ip, get_blocked_ips, is_mock_mode
+from conntrack_monitor import start_conntrack_monitor
+from ebpf_monitor import start_ebpf_monitor
 
 # Globals & Cache
 running = True
@@ -30,6 +32,10 @@ blocked_ips = set()
 ignored_ips = set()
 ignored_names = set()
 ignored_cidrs = []
+
+# Real-time event-based monitoring queues and signals
+connection_events_queue = Queue()
+stop_events_monitor = Event()
 
 view_state = "FEED"  # "FEED", "BLOCKED", "HELP", "PROCESS_DETAIL"
 prev_state = "FEED"
@@ -110,11 +116,20 @@ def log_debug(msg):
         pass
 
 def get_term_size():
-    """Safely query the current terminal dimensions with a sane fallback."""
-    try:
-        return os.get_terminal_size()
-    except OSError:
-        return os.terminal_size((120, 40))
+    """Safely query the current terminal dimensions with a sane fallback.
+    
+    Tries stdout, stderr, and stdin file descriptors in order, because pkexec
+    redirects stdout away from the TTY making os.get_terminal_size() fail or
+    return a stale/incorrect value on fd 1.
+    """
+    for fd in (1, 2, 0):  # stdout, stderr, stdin
+        try:
+            size = os.get_terminal_size(fd)
+            if size.columns > 0 and size.lines > 0:
+                return size
+        except OSError:
+            continue
+    return os.terminal_size((120, 40))
 
 def geo_lookup_worker():
     """Asynchronously resolves pending Geolocation lookups without blocking main scan processes."""
@@ -231,6 +246,47 @@ def update_data_loop():
                     
                     history_cache[key] = conn
 
+            # Process real-time connection events from eBPF & Conntrack
+            while not connection_events_queue.empty():
+                try:
+                    event_conn = connection_events_queue.get_nowait()
+                except Exception:
+                    break
+                    
+                key = (event_conn["protocol"], event_conn["local_ip"], event_conn["local_port"], event_conn["remote_ip"], event_conn["remote_port"])
+                current_keys.add(key)
+                
+                if key in history_cache:
+                    history_cache[key]["last_seen"] = current_time
+                    history_cache[key]["status"] = "ACTIVE"
+                    if event_conn.get("pid"):
+                        history_cache[key]["pid"] = event_conn["pid"]
+                        history_cache[key]["name"] = event_conn["name"]
+                else:
+                    pid = event_conn.get("pid")
+                    name = event_conn.get("name", "Unknown")
+                    remote_ip = event_conn["remote_ip"]
+                    geo = "Local/Private"
+                    if not is_local_ip(remote_ip):
+                        if remote_ip not in geo_cache:
+                            geo_cache[remote_ip] = "Resolving..."
+                            if remote_ip not in geo_pending:
+                                geo_pending.add(remote_ip)
+                                geo_queue.put(remote_ip)
+                        geo = geo_cache[remote_ip]
+                        
+                        if remote_ip not in rdns_cache and remote_ip not in rdns_pending:
+                            rdns_pending.add(remote_ip)
+                            rdns_queue.put(remote_ip)
+                            
+                    event_conn["pid"] = pid
+                    event_conn["name"] = name
+                    event_conn["geo"] = geo
+                    event_conn["last_seen"] = current_time
+                    event_conn["status"] = "ACTIVE"
+                    
+                    history_cache[key] = event_conn
+
             # Handle inactive connections and prune those older than 10.0 seconds
             pruned_history = {}
             for key, conn in history_cache.items():
@@ -267,7 +323,10 @@ def _proto_display(proto, is_active):
 def generate_table():
     global view_state, prompt_mode, input_buffer, blocked_ips, ignored_ips, ignored_names, global_rx, global_tx
 
-    cols = get_term_size().columns
+    term_size = get_term_size()
+    cols = term_size.columns
+    rows = term_size.lines
+    
     table = Table(show_header=True, header_style="bold magenta", expand=True)
     title_suffix = " (MOCK MODE)" if is_mock_mode() else ""
 
@@ -282,34 +341,48 @@ def generate_table():
         # --- Adaptive column layout based on terminal width ---
         if cols >= _LAYOUT_WIDE:
             # WIDE: all columns
+            proc_width = max(16, cols // 6)
+            ip_width = max(16, cols // 6)
             table.add_column("#",              justify="right", style="cyan",      no_wrap=True, width=3)
-            table.add_column("Proto",          style="bold blue",                  no_wrap=True, width=7)
-            table.add_column("Process",        style="green",                      no_wrap=True, max_width=24)
+            table.add_column("Proto",          style="bold blue",                  no_wrap=True, width=5)
+            table.add_column("Dir",            style="bold yellow",                no_wrap=True, width=4)
+            table.add_column("Process",        style="green",                      no_wrap=True, max_width=proc_width)
             table.add_column("PID",            justify="right", style="dim yellow", no_wrap=True, width=7)
-            table.add_column("Remote Address",                                     no_wrap=True, min_width=18)
-            table.add_column("Geo / Hostname", style="magenta",                    no_wrap=True, min_width=16)
+            table.add_column("Remote Address",                                     no_wrap=True, max_width=ip_width)
+            table.add_column("Geo / Hostname", style="magenta",                    no_wrap=True, max_width=cols // 4)
         elif cols >= _LAYOUT_MEDIUM:
             # MEDIUM: drop Geo/Hostname column, fold country into Remote Address
+            proc_width = max(16, cols // 5)
+            ip_width = max(22, cols // 4)
             table.add_column("#",             justify="right", style="cyan",       no_wrap=True, width=3)
-            table.add_column("Proto",         style="bold blue",                   no_wrap=True, width=7)
-            table.add_column("Process",       style="green",                       no_wrap=True, max_width=20)
+            table.add_column("Proto",         style="bold blue",                   no_wrap=True, width=5)
+            table.add_column("Dir",           style="bold yellow",                 no_wrap=True, width=4)
+            table.add_column("Process",       style="green",                       no_wrap=True, max_width=proc_width)
             table.add_column("PID",           justify="right", style="dim yellow",  no_wrap=True, width=7)
-            table.add_column("Remote Address",                                      no_wrap=True, min_width=22)
+            table.add_column("Remote Address",                                      no_wrap=True, max_width=ip_width)
         elif cols >= _LAYOUT_NARROW:
             # NARROW: drop PID and geo, keep essential identity columns
+            proc_width = max(12, cols // 4)
+            ip_width = max(16, cols // 3)
             table.add_column("#",       justify="right", style="cyan",   no_wrap=True, width=3)
-            table.add_column("Proto",   style="bold blue",                no_wrap=True, width=7)
-            table.add_column("Process", style="green",                    no_wrap=True, max_width=16)
-            table.add_column("Remote IP",                                 no_wrap=True, min_width=16)
+            table.add_column("Proto",   style="bold blue",                no_wrap=True, width=5)
+            table.add_column("Process", style="green",                    no_wrap=True, max_width=proc_width)
+            table.add_column("Remote IP",                                 no_wrap=True, max_width=ip_width)
         else:
             # MINIMAL: bare minimum — number, proto, remote IP only
             table.add_column("#",        justify="right", style="cyan",  no_wrap=True, width=3)
-            table.add_column("Proto",    style="bold blue",               no_wrap=True, width=7)
+            table.add_column("Proto",    style="bold blue",               no_wrap=True, width=5)
             table.add_column("Remote IP",                                 no_wrap=True)
 
         conns = get_filtered_conns()
 
-        for i, c in enumerate(conns):
+        # Guard against vertical overflow.
+        # Rich table decoration overhead: top border + title (2) + column headers (1)
+        # + header/data separator (1) + bottom border (1) + caption (1) + margin (2)
+        # = ~8 rows of non-data content. Use 10 to keep a safe buffer.
+        max_rows = max(3, rows - 10)
+
+        for i, c in enumerate(conns[:max_rows]):
             ip          = c["remote_ip"]
             is_blocked  = ip in blocked_ips
             is_active   = c.get("status", "ACTIVE") == "ACTIVE"
@@ -350,14 +423,20 @@ def generate_table():
             if not is_active:
                 geo_disp = f"[dim]{geo_disp}[/dim]"
 
+            # Connection direction display
+            dir_val = c.get("direction", "OUTBOUND")
+            dir_disp = "[bold green]IN[/]" if dir_val == "INBOUND" else "[bold blue]OUT[/]"
+            if not is_active:
+                dir_disp = f"[dim]{dir_val[:3].upper()}[/dim]"
+
             # --- Build row based on tier ---
             if cols >= _LAYOUT_WIDE:
-                table.add_row(idx_disp, proto_disp, proc_disp, pid_disp, ip_disp, geo_disp)
+                table.add_row(idx_disp, proto_disp, dir_disp, proc_disp, pid_disp, ip_disp, geo_disp)
             elif cols >= _LAYOUT_MEDIUM:
                 # Fold country abbreviation into the address cell
                 country = geo_cache.get(ip, "").split(" /")[0].strip()
                 addr_cell = f"{ip_disp} [dim]{country}[/dim]" if country and country not in ("Resolving...", "") else ip_disp
-                table.add_row(idx_disp, proto_disp, proc_disp, pid_disp, addr_cell)
+                table.add_row(idx_disp, proto_disp, dir_disp, proc_disp, pid_disp, addr_cell)
             elif cols >= _LAYOUT_NARROW:
                 table.add_row(idx_disp, proto_disp, proc_disp, ip_disp)
             else:
@@ -407,7 +486,9 @@ def generate_table():
         table.add_column("Blocked IP Address",                 style="red",      no_wrap=True)
         table.add_column("Status",                             style="bold red", no_wrap=True)
 
-        for i, ip in enumerate(get_blocked_ips()):
+        blocked_list = list(get_blocked_ips())
+        max_rows = max(3, rows - 10)
+        for i, ip in enumerate(blocked_list[:max_rows]):
             table.add_row(str(i + 1), ip, "BLOCKED (ACTIVE)")
 
         if prompt_mode == "UNBLOCK":
@@ -676,6 +757,17 @@ def main():
         t.start()
     except Exception:
         log_debug("Failed to start background logic thread.")
+
+    try:
+        # Start background event-based monitors (Conntrack & eBPF)
+        start_conntrack_monitor(connection_events_queue, stop_events_monitor)
+    except Exception as e:
+        log_debug(f"Failed to start Conntrack background monitor: {e}")
+
+    try:
+        start_ebpf_monitor(connection_events_queue, stop_events_monitor)
+    except Exception as e:
+        log_debug(f"Failed to start eBPF background monitor: {e}")
         
     # Wait for first fetch
     time.sleep(0.5)
@@ -713,9 +805,9 @@ def main():
                 woken_by_resize = _resize_event.wait(timeout=0.2)
                 if woken_by_resize:
                     _resize_event.clear()
-                    # Brief pause so the terminal finishes reporting its new dimensions
-                    # before we re-render, avoiding a stale os.get_terminal_size() read.
-                    time.sleep(0.05)
+                    # Debounce: wait until no new resize events arrive for 80ms
+                    while _resize_event.wait(timeout=0.08):
+                        _resize_event.clear()
     except KeyboardInterrupt:
         pass
     except Exception as e:
@@ -724,6 +816,7 @@ def main():
         log_debug(traceback.format_exc())
     finally:
         running = False
+        stop_events_monitor.set()
         if t_input and t_input.is_alive():
             t_input.join(timeout=0.5)
 
