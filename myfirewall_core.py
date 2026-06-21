@@ -1,5 +1,6 @@
 # myfirewall_core.py
 import time
+import re
 import requests
 import ipaddress
 import json
@@ -200,8 +201,11 @@ def update_data_loop():
                     conn["pid"] = pid
                     conn["name"] = name
                     conn["geo"] = geo
+                    conn["first_seen"] = current_time
                     conn["last_seen"] = current_time
                     conn["status"] = "ACTIVE"
+                    conn["packets_tx"] = None
+                    conn["packets_rx"] = None
                     history_cache[key] = conn
 
             while not connection_events_queue.empty():
@@ -239,8 +243,11 @@ def update_data_loop():
                     event_conn["pid"] = pid
                     event_conn["name"] = name
                     event_conn["geo"] = geo
+                    event_conn["first_seen"] = current_time
                     event_conn["last_seen"] = current_time
                     event_conn["status"] = "ACTIVE"
+                    event_conn["packets_tx"] = None
+                    event_conn["packets_rx"] = None
                     history_cache[key] = event_conn
 
             pruned_history = {}
@@ -287,6 +294,84 @@ def toggle_proc_ignore(name):
         log_debug(f"Ignored process: {name}")
     save_config()
 
+def parse_proc_nf_conntrack():
+    """
+    Reads /proc/net/nf_conntrack and returns a dict keyed by
+    (proto, src_ip, src_port, dst_ip, dst_port) -> (packets_tx, packets_rx).
+
+    A typical line (TCP) looks like:
+      ipv4 2 tcp 6 ESTABLISHED src=A dst=B sport=P dport=Q packets=N bytes=M \
+                               src=B dst=A sport=Q dport=P packets=N2 bytes=M2 ...
+    The first src/dst pair is the original (TX) direction;
+    the second is the reply (RX) direction.
+    """
+    result = {}
+    try:
+        with open("/proc/net/nf_conntrack", "r") as f:
+            for line in f:
+                parts = line.split()
+                proto = None
+                # find protocol name (e.g. "tcp", "udp")
+                for p in parts:
+                    if p in ("tcp", "udp", "TCP", "UDP"):
+                        proto = p.upper()
+                        break
+                if proto is None:
+                    continue
+
+                # Extract all src/dst/sport/dport/packets tokens
+                srcs    = re.findall(r'src=(\S+)',     line)
+                dsts    = re.findall(r'dst=(\S+)',     line)
+                sports  = re.findall(r'sport=(\d+)',   line)
+                dports  = re.findall(r'dport=(\d+)',   line)
+                pkts    = re.findall(r'packets=(\d+)', line)
+
+                if len(srcs) < 1 or len(dsts) < 1:
+                    continue
+
+                src_ip  = srcs[0]
+                dst_ip  = dsts[0]
+                sport   = int(sports[0]) if sports else 0
+                dport   = int(dports[0]) if dports else 0
+                tx_pkts = int(pkts[0])   if len(pkts) > 0 else 0
+                rx_pkts = int(pkts[1])   if len(pkts) > 1 else 0
+
+                key = (proto, src_ip, sport, dst_ip, dport)
+                result[key] = (tx_pkts, rx_pkts)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log_debug(f"parse_proc_nf_conntrack error: {e}")
+    return result
+
+
+def conntrack_counters_loop():
+    """
+    Background thread: every ~1 s reads /proc/net/nf_conntrack and
+    updates packets_tx / packets_rx on any matching history_cache entry.
+    """
+    global running, history_cache
+    while running:
+        try:
+            ct = parse_proc_nf_conntrack()
+            for key, conn in list(history_cache.items()):
+                proto, local_ip, local_port, remote_ip, remote_port = key
+                # Try both directions (outbound: local→remote; inbound: remote→local)
+                fwd = (proto, local_ip,  local_port,  remote_ip,  remote_port)
+                rev = (proto, remote_ip, remote_port, local_ip,   local_port)
+                if fwd in ct:
+                    tx, rx = ct[fwd]
+                    conn["packets_tx"] = tx
+                    conn["packets_rx"] = rx
+                elif rev in ct:
+                    rx, tx = ct[rev]   # reversed: reply direction → swap meaning
+                    conn["packets_tx"] = tx
+                    conn["packets_rx"] = rx
+        except Exception as e:
+            log_debug(f"conntrack_counters_loop error: {e}")
+        time.sleep(1.0)
+
+
 def start_core_threads():
     """Initializes and starts all background data/network threads."""
     try:
@@ -309,6 +394,13 @@ def start_core_threads():
         t.start()
     except Exception:
         log_debug("Failed to start background logic thread.")
+
+    try:
+        t_ct = Thread(target=conntrack_counters_loop, name="ConntrackCountersThread")
+        t_ct.daemon = True
+        t_ct.start()
+    except Exception as e:
+        log_debug(f"Failed to start conntrack counters thread: {e}")
 
     try:
         start_conntrack_monitor(connection_events_queue, stop_events_monitor)

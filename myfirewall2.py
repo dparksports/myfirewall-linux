@@ -45,6 +45,30 @@ def get_filtered_conns():
     return filtered
 
 
+def fmt_duration(first_seen):
+    """Formats seconds elapsed since first_seen into a compact string."""
+    secs = int(time.time() - first_seen)
+    if secs < 0:
+        secs = 0
+    if secs < 60:
+        return f"{secs}s"
+    if secs < 3600:
+        return f"{secs // 60}m{secs % 60:02d}s"
+    h = secs // 3600
+    m = (secs % 3600) // 60
+    return f"{h}h{m:02d}m"
+
+
+def fmt_pkts(n):
+    """Formats a packet count compactly (None → '—')."""
+    if n is None:
+        return "—"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.1f}K"
+    return str(n)
+
 def generate_table():
     """Builds the live connections table."""
     global prompt_mode, input_buffer
@@ -61,8 +85,12 @@ def generate_table():
     table.add_column("PID",       width=7,  style="dim yellow", justify="right")
     table.add_column("Remote IP",           style="white")
     table.add_column("Geo / Host",          style="magenta")
+    table.add_column("Duration",  width=8,  style="dim cyan",   justify="right")
+    table.add_column("Pkts↑",     width=7,  style="dim green",  justify="right")
+    table.add_column("Pkts↓",     width=7,  style="dim yellow", justify="right")
 
     conns = get_filtered_conns()
+    now = time.time()
     for i, c in enumerate(conns[:40]):
         ip       = c["remote_ip"]
         proto    = c.get("protocol", "TCP")
@@ -82,7 +110,12 @@ def generate_table():
             ip_disp   = ip
             proc_disp = c["name"]
 
-        table.add_row(str(i + 1), proto, dir_disp, proc_disp, pid, ip_disp, geo_disp)
+        duration = fmt_duration(c.get("first_seen", now))
+        pkts_tx  = fmt_pkts(c.get("packets_tx"))
+        pkts_rx  = fmt_pkts(c.get("packets_rx"))
+
+        table.add_row(str(i + 1), proto, dir_disp, proc_disp, pid, ip_disp, geo_disp,
+                      duration, pkts_tx, pkts_rx)
 
     # Caption: show prompt or key hints
     if prompt_mode == "BLOCK":
