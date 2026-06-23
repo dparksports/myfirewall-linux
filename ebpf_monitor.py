@@ -37,7 +37,39 @@ struct event_t {
     u32 protocol; // 1 = TCP, 2 = UDP
 };
 
+struct pid_comm_t {
+    u32 pid;
+    char task[TASK_COMM_LEN];
+};
+
+BPF_HASH(socket_to_info_cache, struct sock *, struct pid_comm_t);
+
 BPF_PERF_OUTPUT(events);
+
+// Synchronously cache socket to PID/comm on outbound connection attempts
+int kprobe__tcp_v4_connect(struct pt_regs *regs, struct sock *sk) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct pid_comm_t info = {};
+    info.pid = pid;
+    bpf_get_current_comm(&info.task, sizeof(info.task));
+    socket_to_info_cache.update(&sk, &info);
+    return 0;
+}
+
+int kprobe__tcp_v6_connect(struct pt_regs *regs, struct sock *sk) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    struct pid_comm_t info = {};
+    info.pid = pid;
+    bpf_get_current_comm(&info.task, sizeof(info.task));
+    socket_to_info_cache.update(&sk, &info);
+    return 0;
+}
+
+// Clean up socket mapping when socket is closed to prevent leaks
+int kprobe__tcp_close(struct pt_regs *regs, struct sock *sk) {
+    socket_to_info_cache.delete(&sk);
+    return 0;
+}
 
 // Trace TCP state changes (TCP connections)
 TRACEPOINT_PROBE(sock, inet_sock_set_state) {
@@ -48,12 +80,22 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
     if (args->newstate != 1)
         return 0;
         
+    struct sock *sk = (struct sock *)args->skaddr;
+    struct pid_comm_t *info = socket_to_info_cache.lookup(&sk);
+        
     struct event_t event = {};
-    event.pid = bpf_get_current_pid_tgid() >> 32;
     event.lport = args->sport;
     event.rport = args->dport;
     event.family = args->family;
     event.protocol = 1; // TCP
+    
+    if (info) {
+        event.pid = info->pid;
+        __builtin_memcpy(event.task, info->task, TASK_COMM_LEN);
+    } else {
+        event.pid = bpf_get_current_pid_tgid() >> 32;
+        bpf_get_current_comm(&event.task, sizeof(event.task));
+    }
     
     if (args->family == AF_INET) {
         __builtin_memcpy(&event.saddr[0], args->saddr, 4);
@@ -63,7 +105,6 @@ TRACEPOINT_PROBE(sock, inet_sock_set_state) {
         __builtin_memcpy(event.daddr, args->daddr_v6, 16);
     }
     
-    bpf_get_current_comm(&event.task, sizeof(event.task));
     events.perf_submit(args, &event, sizeof(event));
     return 0;
 }

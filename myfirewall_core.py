@@ -12,7 +12,7 @@ from threading import Thread, Event
 
 # Import internal dependencies
 from network_monitor import get_active_connections
-from process_resolver import get_inode_to_pid_map, get_process_info
+from process_resolver import get_inode_to_pid_map, get_process_info, get_detailed_process_info
 from firewall_manager import init_firewall, block_ip, unblock_ip, get_blocked_ips, is_mock_mode
 from conntrack_monitor import start_conntrack_monitor
 from ebpf_monitor import start_ebpf_monitor
@@ -31,11 +31,9 @@ ignored_cidrs = []
 connection_events_queue = Queue()
 stop_events_monitor = Event()
 
-# Asynchronous Geolocation Resolution Queue
 geo_queue = Queue()
 geo_pending = set()
 
-# Asynchronous RDNS Queue
 rdns_queue = Queue()
 rdns_pending = set()
 
@@ -48,6 +46,85 @@ global_tx = 0
 last_net_io = None
 
 CONFIG_FILE = os.path.expanduser("~/.config/myfirewall/rules.json")
+
+def format_bytes(n):
+    if n is None:
+        return "0 B"
+    if n >= 1_073_741_824:
+        return f"{n / 1_073_741_824:.2f} GB"
+    if n >= 1_048_576:
+        return f"{n / 1_048_576:.2f} MB"
+    if n >= 1024:
+        return f"{n / 1024:.2f} KB"
+    return f"{n} B"
+
+def log_connection_history(conn):
+    try:
+        pid = conn.get("pid")
+        if pid:
+            try:
+                proc_info = get_detailed_process_info(pid)
+            except Exception:
+                proc_info = {
+                    "name": conn.get("name", "Unknown"),
+                    "exe": "N/A",
+                    "cmdline": "N/A",
+                    "username": "N/A"
+                }
+        else:
+            proc_info = {
+                "name": conn.get("name", "Unknown"),
+                "exe": "N/A",
+                "cmdline": "N/A",
+                "username": "N/A"
+            }
+
+        first_seen_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(conn.get("first_seen", time.time())))
+        last_seen_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(conn.get("last_seen", time.time())))
+        duration = int(conn.get("last_seen", time.time()) - conn.get("first_seen", time.time()))
+        if duration < 0:
+            duration = 0
+
+        proto = conn.get("protocol", "TCP")
+        direction = conn.get("direction", "OUTBOUND")
+        remote_ip = conn.get("remote_ip")
+        remote_port = conn.get("remote_port", 0)
+        local_ip = conn.get("local_ip", "0.0.0.0")
+        local_port = conn.get("local_port", 0)
+
+        tx_bytes = conn.get("bytes_tx")
+        rx_bytes = conn.get("bytes_rx")
+        tx_pkts = conn.get("packets_tx")
+        rx_pkts = conn.get("packets_rx")
+
+        tx_bytes_str = format_bytes(tx_bytes)
+        rx_bytes_str = format_bytes(rx_bytes)
+        tx_pkts_str = str(tx_pkts) if tx_pkts is not None else "0"
+        rx_pkts_str = str(rx_pkts) if rx_pkts is not None else "0"
+
+        log_line = (
+            f"[{first_seen_str} -> {last_seen_str}] ({duration}s) "
+            f"Proto: {proto} | Dir: {direction} | "
+            f"Local: {local_ip}:{local_port} | Remote: {remote_ip}:{remote_port} | "
+            f"ProcName: {proc_info['name']} | PID: {pid or '?' } | User: {proc_info['username']} | "
+            f"Exe: {proc_info['exe']} | Cmd: {proc_info['cmdline']} | "
+            f"TxBytes: {tx_bytes_str} ({tx_pkts_str} pkts) | RxBytes: {rx_bytes_str} ({rx_pkts_str} pkts)\n"
+        )
+
+        # Write to connection_history.log in workspace and config dir
+        paths = [
+            "./connection_history.log",
+            os.path.expanduser("~/.config/myfirewall/connection_history.log")
+        ]
+        for path in paths:
+            try:
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "a") as f:
+                    f.write(log_line)
+            except Exception:
+                pass
+    except Exception as e:
+        log_debug(f"Failed to log connection history: {e}")
 
 def log_debug(msg):
     try:
@@ -206,6 +283,8 @@ def update_data_loop():
                     conn["status"] = "ACTIVE"
                     conn["packets_tx"] = None
                     conn["packets_rx"] = None
+                    conn["bytes_tx"] = None
+                    conn["bytes_rx"] = None
                     history_cache[key] = conn
 
             while not connection_events_queue.empty():
@@ -248,6 +327,8 @@ def update_data_loop():
                     event_conn["status"] = "ACTIVE"
                     event_conn["packets_tx"] = None
                     event_conn["packets_rx"] = None
+                    event_conn["bytes_tx"] = None
+                    event_conn["bytes_rx"] = None
                     history_cache[key] = event_conn
 
             pruned_history = {}
@@ -256,6 +337,8 @@ def update_data_loop():
                     if current_time - conn["last_seen"] < 10.0:
                         conn["status"] = "INACTIVE"
                         pruned_history[key] = conn
+                    else:
+                        log_connection_history(conn)
                 else:
                     pruned_history[key] = conn
                     
@@ -265,6 +348,13 @@ def update_data_loop():
         except Exception as e:
             log_debug(f"Error in update loop: {e}")
             time.sleep(0.2)
+
+    # Write all remaining active connections on shutdown
+    try:
+        for conn in history_cache.values():
+            log_connection_history(conn)
+    except Exception as e:
+        log_debug(f"Error flushing connection history on exit: {e}")
 
 def toggle_ip_block(ip):
     global blocked_ips
@@ -297,7 +387,7 @@ def toggle_proc_ignore(name):
 def parse_proc_nf_conntrack():
     """
     Reads /proc/net/nf_conntrack and returns a dict keyed by
-    (proto, src_ip, src_port, dst_ip, dst_port) -> (packets_tx, packets_rx).
+    (proto, src_ip, src_port, dst_ip, dst_port) -> (packets_tx, packets_rx, bytes_tx, bytes_rx).
 
     A typical line (TCP) looks like:
       ipv4 2 tcp 6 ESTABLISHED src=A dst=B sport=P dport=Q packets=N bytes=M \
@@ -319,12 +409,13 @@ def parse_proc_nf_conntrack():
                 if proto is None:
                     continue
 
-                # Extract all src/dst/sport/dport/packets tokens
+                # Extract all src/dst/sport/dport/packets/bytes tokens
                 srcs    = re.findall(r'src=(\S+)',     line)
                 dsts    = re.findall(r'dst=(\S+)',     line)
                 sports  = re.findall(r'sport=(\d+)',   line)
                 dports  = re.findall(r'dport=(\d+)',   line)
                 pkts    = re.findall(r'packets=(\d+)', line)
+                bytes_matches = re.findall(r'bytes=(\d+)', line)
 
                 if len(srcs) < 1 or len(dsts) < 1:
                     continue
@@ -335,9 +426,11 @@ def parse_proc_nf_conntrack():
                 dport   = int(dports[0]) if dports else 0
                 tx_pkts = int(pkts[0])   if len(pkts) > 0 else 0
                 rx_pkts = int(pkts[1])   if len(pkts) > 1 else 0
+                tx_b    = int(bytes_matches[0]) if len(bytes_matches) > 0 else 0
+                rx_b    = int(bytes_matches[1]) if len(bytes_matches) > 1 else 0
 
                 key = (proto, src_ip, sport, dst_ip, dport)
-                result[key] = (tx_pkts, rx_pkts)
+                result[key] = (tx_pkts, rx_pkts, tx_b, rx_b)
     except FileNotFoundError:
         pass
     except Exception as e:
@@ -348,7 +441,7 @@ def parse_proc_nf_conntrack():
 def conntrack_counters_loop():
     """
     Background thread: every ~1 s reads /proc/net/nf_conntrack and
-    updates packets_tx / packets_rx on any matching history_cache entry.
+    updates packets_tx / packets_rx and bytes_tx / bytes_rx on any matching history_cache entry.
     """
     global running, history_cache
     while running:
@@ -360,13 +453,17 @@ def conntrack_counters_loop():
                 fwd = (proto, local_ip,  local_port,  remote_ip,  remote_port)
                 rev = (proto, remote_ip, remote_port, local_ip,   local_port)
                 if fwd in ct:
-                    tx, rx = ct[fwd]
-                    conn["packets_tx"] = tx
-                    conn["packets_rx"] = rx
+                    tx_pkts, rx_pkts, tx_b, rx_b = ct[fwd]
+                    conn["packets_tx"] = tx_pkts
+                    conn["packets_rx"] = rx_pkts
+                    conn["bytes_tx"] = tx_b
+                    conn["bytes_rx"] = rx_b
                 elif rev in ct:
-                    rx, tx = ct[rev]   # reversed: reply direction → swap meaning
-                    conn["packets_tx"] = tx
-                    conn["packets_rx"] = rx
+                    rx_pkts, tx_pkts, rx_b, tx_b = ct[rev]   # reversed: reply direction → swap meaning
+                    conn["packets_tx"] = tx_pkts
+                    conn["packets_rx"] = rx_pkts
+                    conn["bytes_tx"] = tx_b
+                    conn["bytes_rx"] = rx_b
         except Exception as e:
             log_debug(f"conntrack_counters_loop error: {e}")
         time.sleep(1.0)

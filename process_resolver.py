@@ -54,3 +54,52 @@ def get_process_info(pid):
         pass
         
     return name, exe
+
+def get_detailed_process_info(pid):
+    """Retrieves detailed process information for history logging."""
+    name = "Unknown"
+    exe = "N/A"
+    cmdline = "N/A"
+    username = "N/A"
+    
+    try:
+        # Get executable path
+        exe_path = f"/proc/{pid}/exe"
+        if os.path.exists(exe_path):
+            exe = os.readlink(exe_path)
+            
+        # Get command line
+        cmd_path = f"/proc/{pid}/cmdline"
+        if os.path.exists(cmd_path):
+            with open(cmd_path, "rb") as f:
+                cmd_bytes = f.read()
+                if cmd_bytes:
+                    cmdline = cmd_bytes.replace(b"\x00", b" ").strip().decode('utf-8', 'ignore')
+                    if not cmdline:
+                        cmdline = "N/A"
+
+        # Get process name and UID from status
+        status_path = f"/proc/{pid}/status"
+        if os.path.exists(status_path):
+            with open(status_path, "r") as f:
+                for line in f:
+                    if line.startswith("Name:"):
+                        name = line.split("\t")[1].strip()
+                    elif line.startswith("Uid:"):
+                        parts = line.split()
+                        if len(parts) > 1:
+                            uid = int(parts[1])
+                            import pwd
+                            try:
+                                username = pwd.getpwuid(uid).pw_name
+                            except Exception:
+                                username = str(uid)
+    except Exception:
+        pass
+        
+    return {
+        "name": name,
+        "exe": exe,
+        "cmdline": cmdline,
+        "username": username
+    }
