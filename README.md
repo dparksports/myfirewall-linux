@@ -42,11 +42,11 @@ pip3 install -r requirements.txt
 
 * **Production Live Guard (Requires Root / sudo)**:
   ```bash
-  sudo python3 myfirewall.py
+  sudo python3 myfirewall2.py
   ```
 * **Development / Simulator mode (Non-root fallback)**:
   ```bash
-  python3 myfirewall.py
+  python3 myfirewall2.py
   ```
 
 ---
@@ -58,11 +58,51 @@ The Live Console supports real-time terminal hotkeys for active analysis and res
 | Key | Action | Description |
 | :---: | :--- | :--- |
 | **`B`** | **Block IP** | Prompt for connection index `#` or direct IP to toggle bidirectional iptables drop rules. |
-| **`U`** | **Unblock IP** | Prompts to reverse drop rules on target IPs (visible inside the blocked list). |
-| **`I`** | **Ignore Host / Proc** | Prompt to ignore specific IP or Process Name on the live feed. |
-| **`L`** | **Toggle View** | Instantly switch view state between **Live Dashboard** and **Active Block List**. |
-| **`H`** | **Help** | Overlay interactive user guides and descriptions. |
-| **`Q` / `ESC`** | **Quit** | Gracefully tear down threads and exit. |
+| **`I`** | **Ignore Host / Proc** | Prompt for connection index `#`, direct IP, CIDR block, or process name to ignore. |
+| **`Q`** | **Quit** | Gracefully tear down threads and exit. |
+
+### Block Command (`B`)
+* When you press **`B`**, a prompt `Block (# or IP):` appears at the bottom.
+* You can enter the connection index number (e.g. `1` to block the IP associated with the first row in the connection list) or a raw IP address directly (e.g. `1.1.1.1`).
+* Press **`Enter`** to submit. This toggles the block rule in iptables (or in a mock blocklist if running without root).
+* To unblock, press **`B`** again and input the same connection index or IP address.
+
+### Ignore Command (`I`)
+* When you press **`I`**, a prompt `Ignore (# or process name):` appears.
+* You can input:
+  * A connection index number (e.g., `3` to ignore that connection's process name).
+  * A process name (e.g., `curl` to ignore all connections from `curl`).
+  * A single IP address (e.g., `8.8.8.8` to ignore all connections involving that IP).
+  * A CIDR network block (e.g., `192.168.1.0/24` to ignore a subnet range).
+* Press **`Enter`** to submit. This ignores matching entries in the live display feed.
+* To unignore, run the same ignore command on the ignored item again.
+
+---
+
+## 🔍 Inspecting Block and Ignore Lists
+
+MyFirewall persists configuration changes, including active blocks and ignores, inside a JSON configuration file located at:
+`~/.config/myfirewall/rules.json`
+
+You can view, inspect, or manually edit the current block and ignore lists directly via standard commands:
+
+```bash
+# Print current configurations using jq (if installed)
+cat ~/.config/myfirewall/rules.json | jq .
+
+# Or using python json tool
+python3 -m json.tool ~/.config/myfirewall/rules.json
+```
+
+**JSON Structure Example:**
+```json
+{
+  "blocked_ips": ["185.190.140.2"],
+  "ignored_ips": ["8.8.8.8"],
+  "ignored_names": ["chrome"],
+  "ignored_cidrs": ["192.168.1.0/24"]
+}
+```
 
 ---
 
@@ -87,7 +127,8 @@ python3 -m unittest test_network_monitor.py test_firewall_manager.py
 
 ```text
 myfirewall-linux/
-├── myfirewall.py             # Main frontend application & dashboard loop
+├── myfirewall2.py            # Main frontend application & dashboard loop
+├── myfirewall_core.py        # Shared core threads, caching, and state
 ├── network_monitor.py        # ProcFS socket parsing core (TCP, UDP, RAW)
 ├── firewall_manager.py       # IPTables wrapper and rules generator
 ├── process_resolver.py       # Inode mapping and executable PID correlator
@@ -95,5 +136,6 @@ myfirewall-linux/
 ├── test_firewall_manager.py  # Unit test coverage for firewall commands
 ├── firewall_architecture.png # Technical system architecture infographic
 ├── requirements.txt          # Visual dependencies (rich, requests)
+├── LICENSE                   # Apache License 2.0
 └── debug.log                 # Appendable application trace log
 ```
