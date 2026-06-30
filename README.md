@@ -120,3 +120,8 @@ myfirewall-linux/
 ├── LICENSE                   # Apache License 2.0
 └── debug.log                 # Appendable application trace log
 ```
+
+---
+
+<p align="center">Made with ❤️ in California</p>
+
