@@ -1,130 +1,111 @@
-# 🛡️ MyFirewall: Intelligent Linux Network Monitor & Firewall Dashboard
+# 🛡️ MyFirewall: Protect Your System from Cyber Attacks
 
-MyFirewall is a highly responsive, real-time Linux network monitoring console and bidirectional host isolation firewall. Written in Python and powered by a beautiful terminal dashboard, it intercepts, classifies, and manages kernel socket activity across **TCP, UDP, and RAW** sockets, helping security operators track, isolate, and neutralize cyber threats instantly.
+MyFirewall is a simple, visual tool designed to help everyday folks—including **scientists, journalists, government employees, students, and individuals**—monitor their computer's internet activity and block suspicious connections in real time. 
 
----
-
-## 📐 System Architecture
-
-MyFirewall utilizes direct ProcFS API harvesting and custom iptables Netfilter rulesets to ensure real-time host-level threat analysis and active defenses:
-
-![MyFirewall Architecture](./firewall_architecture.png)
-
-### Architectural Flow:
-1. **Socket Harvester**: Scans `/proc/net/tcp{,6}`, `/proc/net/udp{,6}`, and `/proc/net/raw{,6}` directly inside Linux Kernel space at a highly reactive rate (**5Hz / every 0.2s**), keeping CPU consumption low (~4.4%).
-2. **PID & Process Resolver**: Correlates socket inodes on-the-fly by parsing `/proc/<PID>/fd/` symlink associations.
-3. **Asynchronous Geolocation Resolver**: Dispatches remote IPs to an active background consumer queue (`geo_queue`) processing lookups sequentially. This avoids locking the harvester or UI loops and respects external API rate limiting standards.
-4. **Firewall Manager**: Hooks directly into the system's `INPUT` (inbound) and `OUTPUT` (outbound) Netfilter strings, dropping target traffic from source (`-s`) and destination (`-d`) channels for total host-defense isolation.
+If you are concerned about spyware, unauthorized background connections, or tracking, MyFirewall shows you exactly what apps are talking to the internet, where they are sending data, and lets you block them instantly with a single keypress.
 
 ---
 
-## ✨ Features
+## 🎯 Who is this for?
 
-* **Expanded Socket Coverage**: Harvests, translates, and filters `TCP`, `UDP`, and `RAW` sockets for both `IPv4` and `IPv6` protocols.
-* **Transient Connection Persistence (10s decay buffer)**: Captures sub-100ms connection events before they tear down. Terminated sockets transition to greyed out **`(INACTIVE)`** text for **10 seconds** rather than immediately vanishing, protecting operators against time-window evasion attempts.
-* **Asynchronous GeoIP Mapping**: Translates raw remote connection destinations to physical countries asynchronously without blocking updates.
-* **Bidirectional Host Isolation**: One-key blocking isolates both inbound probes and outbound exfiltrations or reverse shells by generating matching source/destination drops in a custom iptables chain (`MYFIREWALL_BLOCKS`).
-* **Fallback Simulation Support**: Detects root privileges on launch and dynamically activates mock mode simulation safe-nets when running as a non-privileged user.
+* **📰 Journalists**: Secure your sources. Monitor background connections to ensure sensitive documents or communication apps aren't leaking data to unknown countries.
+* **🔬 Scientists & Researchers**: Protect your research data. Keep track of which software tools are accessing external servers and verify they are only connecting to trusted locations.
+* **🏛️ Government Employees**: Shield your workspace. Identify rogue software or tools attempting to communicate out of your local network.
+* **🎓 Students & Everyday Folks**: Learn and secure. View internet traffic live in a beautiful dashboard and block invasive trackers or apps you don't trust.
 
 ---
 
-## 🚀 Quickstart
+## ✨ Key Features (Made Simple)
 
-### Prerequisites:
-Make sure python3, iptables (optional for live blocking), and connection requirements are met.
+* **🗺️ Real-time Map & Connection Info**: Translates ugly numerical IP addresses into the actual countries they belong to, as well as the name of the app initiating the traffic.
+* **🚦 Transient Connection Memory**: Even if an app connects for a split second (a common trick for tracking scripts), MyFirewall keeps it on the screen greyed out for **10 seconds** so you can inspect it.
+* **🧱 Live Blocking**: Stop an IP address from sending data to or receiving data from your computer instantly.
+* **🙈 Clean Feed (Ignore)**: Hide trusted apps (like your web browser) so you can focus only on the connections you don't recognize.
+
+---
+
+## 🚀 Easy Installation and Setup
+
+### 1. Install Dependencies
+Open your terminal and run the following command to download the visual dashboard library:
 
 ```bash
-# Clone the repository and install requirements
 pip3 install -r requirements.txt
 ```
 
-### Run the Dashboard:
+### 2. Run MyFirewall
 
-* **Production Live Guard (Requires Root / sudo)**:
+* **🛡️ Security Mode (Recommended)**: To block connections in real-time, MyFirewall needs system permissions (using `sudo`):
   ```bash
   sudo python3 myfirewall2.py
   ```
-* **Development / Simulator mode (Non-root fallback)**:
+* **👁️ Monitor-Only Mode (Safe Mode)**: Runs without root privileges. You can view all connection information, but any blocks will be "mocked" (simulated) and won't affect your active system firewall:
   ```bash
   python3 myfirewall2.py
   ```
 
 ---
 
-## ⌨️ Interactive Controls Guide
+## ⌨️ How to Use: Interactive Controls
 
-The Live Console supports real-time terminal hotkeys for active analysis and response:
+When MyFirewall is running, you will see a list of rows representing apps connected to the internet. Each row has a number (`#`) on the far left.
 
-| Key | Action | Description |
-| :---: | :--- | :--- |
-| **`B`** | **Block IP** | Prompt for connection index `#` or direct IP to toggle bidirectional iptables drop rules. |
-| **`I`** | **Ignore Host / Proc** | Prompt for connection index `#`, direct IP, CIDR block, or process name to ignore. |
-| **`Q`** | **Quit** | Gracefully tear down threads and exit. |
+### 1. Block an App/IP (`B`)
+If you see an app or an IP address that looks suspicious (for example, connecting to a country you don't recognize):
+1. Press the **`B`** key on your keyboard.
+2. A prompt will appear at the bottom: `Block (# or IP):`.
+3. Type the **number** of the row (e.g., `1`), or type the **IP address** directly (e.g., `185.190.140.2`).
+4. Press **`Enter`**. 
+5. The row will turn **red** with a **`[BLKD]`** tag. That remote server can no longer communicate with your system.
+6. To **unblock**, press **`B`** again, enter the same number or IP, and press **`Enter`**.
 
-### Block Command (`B`)
-* When you press **`B`**, a prompt `Block (# or IP):` appears at the bottom.
-* You can enter the connection index number (e.g. `1` to block the IP associated with the first row in the connection list) or a raw IP address directly (e.g. `1.1.1.1`).
-* Press **`Enter`** to submit. This toggles the block rule in iptables (or in a mock blocklist if running without root).
-* To unblock, press **`B`** again and input the same connection index or IP address.
+### 2. Hide Trusted Apps/IPs (`I`)
+Your dashboard might get crowded with normal traffic (like Chrome or Firefox). To hide them:
+1. Press the **`I`** key on your keyboard.
+2. A prompt will appear: `Ignore (# or process name):`.
+3. Type the row number, the name of the app (e.g., `chrome`), or an IP address you trust.
+4. Press **`Enter`**. Those connections will disappear from the live screen.
+5. To show them again, type the same name or IP in the ignore prompt again.
 
-### Ignore Command (`I`)
-* When you press **`I`**, a prompt `Ignore (# or process name):` appears.
-* You can input:
-  * A connection index number (e.g., `3` to ignore that connection's process name).
-  * A process name (e.g., `curl` to ignore all connections from `curl`).
-  * A single IP address (e.g., `8.8.8.8` to ignore all connections involving that IP).
-  * A CIDR network block (e.g., `192.168.1.0/24` to ignore a subnet range).
-* Press **`Enter`** to submit. This ignores matching entries in the live display feed.
-* To unignore, run the same ignore command on the ignored item again.
+### 3. Quit (`Q`)
+* Press **`Q`** at any time to exit the dashboard safely.
 
 ---
 
-## 🔍 Inspecting Block and Ignore Lists
+## 🔍 Inspecting Your Blocked & Ignored Rules
 
-MyFirewall persists configuration changes, including active blocks and ignores, inside a JSON configuration file located at:
-`~/.config/myfirewall/rules.json`
+All of your settings, blocks, and ignored items are automatically saved in a simple text file inside your home folder. You can open and view this file at any time.
 
-You can view, inspect, or manually edit the current block and ignore lists directly via standard commands:
+* **Where is it stored?**
+  `~/.config/myfirewall/rules.json` (inside your user configuration folder).
 
-```bash
-# Print current configurations using jq (if installed)
-cat ~/.config/myfirewall/rules.json | jq .
-
-# Or using python json tool
-python3 -m json.tool ~/.config/myfirewall/rules.json
-```
-
-**JSON Structure Example:**
-```json
-{
-  "blocked_ips": ["185.190.140.2"],
-  "ignored_ips": ["8.8.8.8"],
-  "ignored_names": ["chrome"],
-  "ignored_cidrs": ["192.168.1.0/24"]
-}
-```
+* **How to view it?**
+  Open your terminal and run:
+  ```bash
+  python3 -m json.tool ~/.config/myfirewall/rules.json
+  ```
 
 ---
 
-## 🧪 Running Unit Tests
+## 📐 Technical Architecture & Developer Notes
 
-The test suite consists of mock-driven units verifying parsing, address re-orderings, state conditions, and IPTables chain setup profiles with zero environment dependencies.
+For software developers, engineers, or advanced users:
 
+MyFirewall utilizes ProcFS harvesting and custom `iptables` Netfilter rulesets to verify real-time threat analysis:
+
+![MyFirewall Architecture](./firewall_architecture.png)
+
+1. **Socket Harvester**: Scans `/proc/net/tcp{,6}`, `/proc/net/udp{,6}`, and `/proc/net/raw{,6}` directly in Linux Kernel space at **5Hz (every 0.2s)**.
+2. **PID & Process Resolver**: Maps socket inodes by parsing `/proc/<PID>/fd/` symlink associations.
+3. **Asynchronous Geolocation**: Resolves external IP ranges through a query queue sequentially using `ip-api.com` without blocking the main UI loops.
+4. **Firewall Manager**: Hooks directly into the system's `INPUT` and `OUTPUT` iptables chains, dropping traffic matching `-s` and `-d` selectors.
+
+### Running Unit Tests
 ```bash
-# Run all tests
 python3 -m unittest test_network_monitor.py test_firewall_manager.py
 ```
 
-### Validated Units:
-* `test_hex_to_ip_port_ipv4`: Validates accurate little-endian IPv4 network translation.
-* `test_hex_to_ip_port_ipv6`: Verifies complex packing/unpacking loopback IPv6 parsing.
-* `test_get_active_connections`: Tests multi-protocol ProcFS harvesting and duplicate filtering.
-* `test_mock_block_ip`: Asserts duplicate block security and ignore profiles.
-
----
-
-## 📁 Codebase Directory Layout
-
+### Codebase Directory Layout
 ```text
 myfirewall-linux/
 ├── myfirewall2.py            # Main frontend application & dashboard loop
